@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand Specific Colors - Fuchsia Skincare Palette */
+  --color-brand-fuchsia: #d946ef;          /* Dynamic Fuchsia Pink */
+  --color-brand-fuchsia-light: #f5d0fe;    /* Creamy Fuchsia Pastel */
+  --color-brand-fuchsia-dark: #a21caf;     /* Luxurious Deep Magenta */
+  --color-brand-rosewater: #fff1f2;        /* Soft Organic Rosewater Pink */
+  --color-brand-champagne: #fafaf9;        /* Warm Skincare Creamy White */
+  --color-brand-charcoal: #1c1917;         /* High Contrast Charcoal Black */
+  --color-brand-muted: #78716c;            /* Warm Soft Stone Gray */
+  
+  /* Fonts */
+  --font-sans: 'Inter', sans-serif;
+  --font-serif: 'Outfit', sans-serif;
+  
+  /* Customized Radius */
+  --radius-skincare: 1.25rem; /* Elegant rounded borders for jars/boxes look */
+}
+
+/* Base custom styles and global variables */
+@layer base {
+  body {
+    background-color: var(--color-brand-champagne);
+    color: var(--color-brand-charcoal);
+    font-family: var(--font-sans);
+    overflow-x: hidden;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-serif);
+    font-weight: 600;
+  }
+}
+
+/* Glassmorphism Skincare Card Utility */
+.glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 8px 32px 0 rgba(217, 70, 239, 0.05);
+}
+
+.glass-header {
+  background: rgba(250, 250, 249, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+/* Glowing buttons */
+.btn-fuchsia-glow {
+  background: linear-gradient(135deg, var(--color-brand-fuchsia) 0%, var(--color-brand-fuchsia-dark) 100%);
+  color: white;
+  box-shadow: 0 4px 14px 0 rgba(217, 70, 239, 0.35);
+  transition: all 0.3s ease;
+}
+
+.btn-fuchsia-glow:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px 0 rgba(217, 70, 239, 0.5);
+}
+
+.btn-fuchsia-glow:active {
+  transform: translateY(1px);
+}
