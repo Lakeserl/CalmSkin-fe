@@ -147,7 +147,6 @@ export class LanguageService {
       'profile.tabAddress': 'Address Book',
       'profile.changeAvatar': 'Edit Photo',
 
-      // Profile -> Info Form
       'profile.infoHeading': 'Personal Information',
       'profile.fullName': 'Full Name',
       'profile.phone': 'Phone Number',
@@ -159,7 +158,6 @@ export class LanguageService {
       'profile.saveBtn': 'Save Changes',
       'profile.saving': 'Saving...',
 
-      // Profile -> Loyalty
       'profile.loyaltyHeading': 'Loyalty Point Ledger',
       'profile.loyaltyDate': 'Date',
       'profile.loyaltyType': 'Type',
@@ -168,7 +166,6 @@ export class LanguageService {
       'profile.loyaltyEarn': 'EARN COIN',
       'profile.loyaltySpend': 'SPEND COIN',
 
-      // Profile -> Address
       'profile.addrHeading': 'Shipping Addresses',
       'profile.addrAddNew': '+ Add New Address',
       'profile.addrClose': 'Close form',
@@ -183,7 +180,6 @@ export class LanguageService {
       'profile.addrDelete': 'Delete',
       'profile.addrIsDefault': 'Default',
 
-      // Footer
       'footer.desc': 'A nature-infused brand combined with cutting-edge dermatology. Safely and sustainably rejuvenating Vietnamese skin.',
       'footer.badgeAuthenticTitle': '100% Genuine',
       'footer.badgeAuthenticDesc': 'Strict ingredient vetting, perfectly safe for sensitive skin.',
@@ -206,7 +202,6 @@ export class LanguageService {
       'footer.newsletterPlaceholder': 'Your email address...',
       'footer.newsletterSend': 'Send',
 
-      // Admin Layout
       'admin.title': 'CalmSKIN Admin',
       'admin.menuDashboard': '📊 Dashboard',
       'admin.menuProducts': '📦 Products',
@@ -216,7 +211,6 @@ export class LanguageService {
     }
   };
 
-  // Reactive computed dictionary
   readonly t = computed(() => this.translations[this.currentLang()]);
 
   setLanguage(lang: 'vi' | 'en') {

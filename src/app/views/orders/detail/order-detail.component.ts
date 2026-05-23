@@ -2,7 +2,13 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { OrderService } from '../../../core/services/order.service';
+import { PaymentService } from '../../../core/services/payment.service';
 import { OrderDTO, OrderStatus } from '../../../core/models/order.model';
+
+interface TimelineStep {
+  label: string;
+  rank: number;
+}
 
 @Component({
   selector: 'app-order-detail',
@@ -10,8 +16,7 @@ import { OrderDTO, OrderStatus } from '../../../core/models/order.model';
   imports: [CommonModule, RouterLink],
   template: `
     <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-      
-      <!-- Back button -->
+
       <a routerLink="/orders" class="inline-flex items-center space-x-1 text-xs text-brand-fuchsia font-semibold hover:underline mb-6">
         <span>← Quay lại lịch sử đơn</span>
       </a>
@@ -22,13 +27,16 @@ import { OrderDTO, OrderStatus } from '../../../core/models/order.model';
           <div class="h-40 bg-stone-50 border rounded-skincare"></div>
         </div>
       } @else if (!order()) {
-        <div class="text-center py-20 bg-white border rounded-skincare">
-          <p class="text-brand-muted text-sm">Không tìm thấy chi tiết của đơn hàng này.</p>
+        <div class="text-center py-20 bg-white border rounded-skincare space-y-2">
+          <p class="text-brand-charcoal text-sm font-semibold">Không tìm thấy chi tiết của đơn hàng này.</p>
+          @if (errorMessage()) {
+            <p class="text-xs text-brand-muted">{{ errorMessage() }}</p>
+          }
         </div>
       } @else {
-        
+
         <div class="space-y-8 animate-fade-in">
-          
+
           <!-- Header Card -->
           <div class="bg-white p-6 rounded-skincare border border-brand-fuchsia-light/10 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div class="space-y-1">
@@ -36,82 +44,69 @@ import { OrderDTO, OrderStatus } from '../../../core/models/order.model';
               <h1 class="text-xl font-mono font-bold text-brand-charcoal">{{ order()?.orderNumber }}</h1>
               <p class="text-xs text-brand-muted">Ngày đặt: {{ order()?.createdAt | date:'dd/MM/yyyy HH:mm' }}</p>
             </div>
-            
+
             <div class="flex flex-col sm:items-end">
               <span class="text-xs text-brand-muted">Phương thức: <strong class="text-brand-charcoal">{{ order()?.paymentMethod }}</strong></span>
               <span class="text-[10px] font-extrabold uppercase px-3 py-1 rounded-full tracking-wider mt-1.5"
-                [ngClass]="{
-                  'bg-amber-100 text-amber-700': order()?.status === 'PENDING',
-                  'bg-blue-100 text-blue-700': order()?.status === 'CONFIRMED',
-                  'bg-cyan-100 text-cyan-700': order()?.status === 'PREPARING',
-                  'bg-indigo-100 text-indigo-700': order()?.status === 'SHIPPING',
-                  'bg-emerald-100 text-emerald-700': order()?.status === 'DELIVERED',
-                  'bg-red-100 text-red-700': order()?.status === 'CANCELLED',
-                  'bg-purple-100 text-purple-700': order()?.status === 'RETURNED'
-                }"
+                [ngClass]="statusClass(order()!.status)"
               >
                 {{ getStatusText(order()!.status) }}
               </span>
             </div>
           </div>
 
-          <!-- GRAPHICAL TIMELINE TRACKER -->
-          @if (order()?.status !== 'CANCELLED' && order()?.status !== 'RETURNED') {
+          <!-- TIMELINE TRACKER -->
+          @if (!isTerminalBad(order()!.status)) {
             <div class="bg-white p-6 sm:p-8 rounded-skincare border border-brand-fuchsia-light/10 shadow-sm">
               <h2 class="text-sm font-semibold text-brand-charcoal mb-6 text-center uppercase tracking-wider">Hành Trình Giao Mỹ Phẩm</h2>
-              
-              <!-- Horizontal steps (Desktop) / Vertical (Mobile) -->
+
               <div class="relative flex flex-col md:flex-row justify-between items-center space-y-8 md:space-y-0 md:px-10">
-                
-                <!-- Background track bar -->
                 <div class="absolute top-2.5 left-0 right-0 h-1 bg-stone-100 hidden md:block z-0"></div>
                 <div class="absolute top-2.5 left-10 right-10 h-1 bg-brand-fuchsia/40 hidden md:block z-0 transition-all duration-300"
                   [ngStyle]="{ 'width': getTimelineWidth() }"
                 ></div>
 
-                <!-- Steps -->
-                @for (step of timelineSteps; track step.status; let i = $index) {
+                @for (step of timelineSteps; track step.rank; let i = $index) {
                   <div class="flex flex-row md:flex-col items-center z-10 w-full md:w-auto space-x-4 md:space-x-0">
-                    <!-- Icon circle -->
                     <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-sm border transition-all duration-300"
                       [ngClass]="{
-                        'bg-brand-fuchsia text-white border-brand-fuchsia animate-pulse-glow': isStepActive(step.status),
-                        'bg-brand-fuchsia-light/30 text-brand-fuchsia-dark border-brand-fuchsia-light': isStepPassed(step.status),
-                        'bg-white text-stone-300 border-stone-200': !isStepActive(step.status) && !isStepPassed(step.status)
+                        'bg-brand-fuchsia text-white border-brand-fuchsia animate-pulse-glow': isStepActive(step),
+                        'bg-brand-fuchsia-light/30 text-brand-fuchsia-dark border-brand-fuchsia-light': isStepPassed(step),
+                        'bg-white text-stone-300 border-stone-200': !isStepActive(step) && !isStepPassed(step)
                       }"
                     >
-                      @if (isStepPassed(step.status)) {
-                        <!-- Checkmark icon -->
+                      @if (isStepPassed(step)) {
                         <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M5 13l4 4L19 7"></path></svg>
                       } @else {
                         {{ i + 1 }}
                       }
                     </div>
-                    
-                    <!-- Label details -->
                     <div class="text-left md:text-center md:mt-2">
                       <p class="font-semibold text-xs text-brand-charcoal">{{ step.label }}</p>
-                      @if (getStepTime(step.status)) {
-                        <p class="text-[9px] text-brand-muted mt-0.5">{{ getStepTime(step.status) | date:'dd/MM HH:mm' }}</p>
+                      @if (getStepTime(step.rank)) {
+                        <p class="text-[9px] text-brand-muted mt-0.5">{{ getStepTime(step.rank) | date:'dd/MM HH:mm' }}</p>
                       }
                     </div>
                   </div>
                 }
-
               </div>
             </div>
           }
 
-          <!-- Delivery Address & Receiver details -->
+          @if (order()?.cancelReason) {
+            <div class="bg-red-50 border border-red-100 rounded-skincare p-4 text-xs text-red-700">
+              <strong>Lý do hủy/hoàn:</strong> {{ order()?.cancelReason }}
+            </div>
+          }
+
+          <!-- Receiver + Address -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
             <div class="bg-white p-5 rounded-skincare border border-brand-fuchsia-light/10 shadow-sm space-y-2 text-xs">
               <h3 class="font-bold text-brand-charcoal uppercase tracking-wider text-[10px]">Người Nhận Hàng</h3>
               <p class="font-semibold text-brand-charcoal">{{ order()?.shippingName }}</p>
               <p class="text-brand-muted">SĐT: {{ order()?.shippingPhone }}</p>
               <p class="text-brand-muted">Ghi chú: {{ order()?.note || 'Không có ghi chú.' }}</p>
             </div>
-
             <div class="bg-white p-5 rounded-skincare border border-brand-fuchsia-light/10 shadow-sm space-y-2 text-xs">
               <h3 class="font-bold text-brand-charcoal uppercase tracking-wider text-[10px]">Địa Chỉ Nhận Hàng</h3>
               <p class="text-brand-muted leading-relaxed">
@@ -120,27 +115,49 @@ import { OrderDTO, OrderStatus } from '../../../core/models/order.model';
                 Thành phố {{ order()?.shippingProvince }}
               </p>
             </div>
-
           </div>
 
-          <!-- Items list & invoice summary -->
+          <!-- Payment info -->
+          @if (order()?.paymentInfo; as pay) {
+            <div class="bg-white p-5 rounded-skincare border border-brand-fuchsia-light/10 shadow-sm text-xs space-y-2">
+              <h3 class="font-bold text-brand-charcoal uppercase tracking-wider text-[10px] border-b pb-2">Thông Tin Thanh Toán</h3>
+              <div class="flex justify-between"><span class="text-brand-muted">Phương thức:</span><strong class="text-brand-charcoal">{{ pay.paymentMethod }}</strong></div>
+              <div class="flex justify-between">
+                <span class="text-brand-muted">Trạng thái:</span>
+                <strong [ngClass]="pay.paymentStatus === 'COMPLETED' ? 'text-emerald-600' : (pay.paymentStatus === 'FAILED' ? 'text-red-600' : 'text-amber-600')">
+                  {{ getPaymentStatusText(pay.paymentStatus) }}
+                </strong>
+              </div>
+              @if (pay.transactionId) {
+                <div class="flex justify-between"><span class="text-brand-muted">Mã giao dịch:</span><span class="font-mono text-brand-charcoal">{{ pay.transactionId }}</span></div>
+              }
+              @if (pay.paidAt) {
+                <div class="flex justify-between"><span class="text-brand-muted">Thời điểm thanh toán:</span><span class="text-brand-charcoal">{{ pay.paidAt | date:'dd/MM/yyyy HH:mm' }}</span></div>
+              }
+              @if (pay.refundAmount && pay.refundAmount > 0) {
+                <div class="flex justify-between text-purple-600 font-medium"><span>Đã hoàn tiền:</span><span>{{ pay.refundAmount | currency:'VND':'symbol':'1.0-0' }}</span></div>
+              }
+            </div>
+          }
+
+          <!-- Items + invoice -->
           <div class="bg-white rounded-skincare border border-brand-fuchsia-light/10 p-6 space-y-4 shadow-sm text-xs">
             <h3 class="font-bold text-brand-charcoal uppercase tracking-wider text-[10px] border-b pb-2">Danh sách mỹ phẩm đặt mua</h3>
-            
+
             <div class="space-y-3">
               @for (item of order()?.items; track item.id) {
                 <div class="flex items-center space-x-3">
-                  <img [src]="item.primaryImageUrl || 'assets/placeholder.jpg'" class="w-12 h-12 object-cover rounded border bg-brand-champagne" />
+                  <img [src]="item.productImageUrl || 'assets/placeholder.jpg'" class="w-12 h-12 object-cover rounded border bg-brand-champagne" />
                   <div class="flex-1 min-w-0">
-                    <a [routerLink]="['/products', item.productSlug]" class="font-semibold text-brand-charcoal hover:underline truncate block">{{ item.productName }}</a>
+                    <p class="font-semibold text-brand-charcoal truncate">{{ item.productName }}</p>
                     @if (item.variantName) {
                       <p class="text-[9px] text-brand-muted mt-0.5">{{ item.variantName }}</p>
                     }
-                    <p class="text-brand-muted mt-0.5">Đơn giá: {{ item.price | currency:'VND':'symbol':'1.0-0' }}</p>
+                    <p class="text-brand-muted mt-0.5">Đơn giá: {{ item.unitPrice | currency:'VND':'symbol':'1.0-0' }}</p>
                   </div>
                   <div class="text-right shrink-0">
                     <p class="font-semibold text-brand-charcoal">{{ item.quantity }} x</p>
-                    <p class="font-bold text-brand-fuchsia-dark">{{ item.totalPrice | currency:'VND':'symbol':'1.0-0' }}</p>
+                    <p class="font-bold text-brand-fuchsia-dark">{{ item.subtotal | currency:'VND':'symbol':'1.0-0' }}</p>
                   </div>
                 </div>
               }
@@ -155,13 +172,13 @@ import { OrderDTO, OrderStatus } from '../../../core/models/order.model';
                 <span>Phí vận chuyển:</span>
                 <span>{{ order()?.shippingFee === 0 ? 'Miễn phí' : (order()?.shippingFee | currency:'VND':'symbol':'1.0-0') }}</span>
               </div>
-              @if (order()?.discountAmount && order()!.discountAmount > 0) {
+              @if (order()!.discountAmount > 0) {
                 <div class="flex justify-between text-emerald-600 font-medium">
                   <span>Tiết kiệm giá KM:</span>
                   <span>-{{ order()?.discountAmount | currency:'VND':'symbol':'1.0-0' }}</span>
                 </div>
               }
-              @if (order()?.pointsAmount && order()!.pointsAmount > 0) {
+              @if (order()!.pointsAmount > 0) {
                 <div class="flex justify-between text-emerald-600 font-medium">
                   <span>Khấu trừ xu tích lũy ({{ order()?.pointsUsed }} xu):</span>
                   <span>-{{ order()?.pointsAmount | currency:'VND':'symbol':'1.0-0' }}</span>
@@ -173,15 +190,23 @@ import { OrderDTO, OrderStatus } from '../../../core/models/order.model';
               </div>
             </div>
 
-            <!-- Customer actions for returns -->
-            <div class="flex items-center justify-end space-x-2 pt-2 border-t font-semibold">
-              @if (order()?.status === 'PENDING') {
-                <button (click)="triggerCancel()" class="px-5 py-2.5 border border-red-200 text-red-500 hover:bg-red-50 rounded-full transition-all">
+            <!-- Customer actions -->
+            <div class="flex flex-wrap items-center justify-end gap-2 pt-2 border-t font-semibold">
+              @if (canPayOnline()) {
+                <button (click)="payNow()" [disabled]="isProcessing()"
+                  class="px-5 py-2.5 btn-fuchsia-glow rounded-full transition-all disabled:opacity-50">
+                  {{ isProcessing() ? 'Đang xử lý...' : 'Thanh Toán Ngay' }}
+                </button>
+              }
+              @if (canCancel()) {
+                <button (click)="triggerCancel()" [disabled]="isProcessing()"
+                  class="px-5 py-2.5 border border-red-200 text-red-500 hover:bg-red-50 rounded-full transition-all disabled:opacity-50">
                   Hủy đơn hàng này
                 </button>
               }
               @if (order()?.status === 'DELIVERED') {
-                <button (click)="triggerReturn()" class="px-5 py-2.5 border border-brand-fuchsia text-brand-fuchsia hover:bg-brand-rosewater rounded-full transition-all">
+                <button (click)="triggerReturn()" [disabled]="isProcessing()"
+                  class="px-5 py-2.5 border border-brand-fuchsia text-brand-fuchsia hover:bg-brand-rosewater rounded-full transition-all disabled:opacity-50">
                   Yêu Cầu Hoàn Tiền / Trả Hàng
                 </button>
               }
@@ -196,56 +221,33 @@ import { OrderDTO, OrderStatus } from '../../../core/models/order.model';
 })
 export class OrderDetailComponent implements OnInit {
   private readonly orderService = inject(OrderService);
+  private readonly paymentService = inject(PaymentService);
   private readonly route = inject(ActivatedRoute);
 
   readonly order = signal<OrderDTO | null>(null);
   readonly isLoading = signal(false);
+  readonly isProcessing = signal(false);
+  readonly errorMessage = signal('');
 
-  readonly timelineSteps = [
-    { label: 'Chờ duyệt', status: 'PENDING' },
-    { label: 'Xác nhận', status: 'CONFIRMED' },
-    { label: 'Đóng gói', status: 'PREPARING' },
-    { label: 'Đang giao', status: 'SHIPPING' },
-    { label: 'Đã giao', status: 'DELIVERED' }
+  readonly timelineSteps: TimelineStep[] = [
+    { label: 'Chờ duyệt', rank: 0 },
+    { label: 'Xác nhận', rank: 1 },
+    { label: 'Đóng gói', rank: 2 },
+    { label: 'Đang giao', rank: 3 },
+    { label: 'Đã giao', rank: 4 },
   ];
 
-  // Mock list matching orderNumber
-  private readonly mockOrderDetail: OrderDTO = {
-    id: 1001,
-    orderNumber: 'ORD-20260520-7492',
-    userId: 1,
-    shippingName: 'Khánh Linh',
-    shippingPhone: '0987654321',
-    shippingProvince: 'Hồ Chí Minh',
-    shippingDistrict: 'Quận 1',
-    shippingWard: 'Bến Nghé',
-    shippingStreet: '15 Lê Lợi',
-    subtotal: 299000,
-    discountAmount: 0,
-    shippingFee: 30000,
-    pointsUsed: 0,
-    pointsAmount: 0,
-    totalAmount: 329000,
-    status: 'PENDING',
-    paymentMethod: 'COD',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    items: [
-      {
-        id: 111,
-        productId: 1,
-        productName: 'Tinh chất Trị Mụn BHA 2% Salicylic Acid Acne Clearing Serum',
-        productSlug: 'tinh-chat-tri-mun-bha-2-percent',
-        primaryImageUrl: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&q=80&w=200',
-        variantName: 'Dung tích 30ml',
-        quantity: 1,
-        price: 299000,
-        totalPrice: 299000
-      }
-    ],
-    statusHistory: [
-      { id: 991, status: 'PENDING', note: 'Đơn hàng mới được thiết lập.', createdAt: new Date().toISOString() }
-    ]
+  // Maps order status to a position on the 5-step timeline.
+  private readonly statusRank: Record<OrderStatus, number> = {
+    PENDING: 0,
+    CONFIRMED: 1,
+    PAID: 1,
+    PREPARING: 2,
+    SHIPPING: 3,
+    DELIVERED: 4,
+    CANCELLED: -1,
+    RETURN_REQUESTED: 4,
+    RETURNED: 4,
   };
 
   ngOnInit(): void {
@@ -257,122 +259,187 @@ export class OrderDetailComponent implements OnInit {
     });
   }
 
-  loadOrderDetail(orderNumber: string) {
+  loadOrderDetail(orderNumber: string): void {
     this.isLoading.set(true);
+    this.errorMessage.set('');
     this.orderService.getOrderDetail(orderNumber).subscribe({
       next: (res) => {
         this.isLoading.set(false);
         if (res.success && res.data) {
           this.order.set(res.data);
         } else {
-          this.order.set({ ...this.mockOrderDetail, orderNumber });
+          this.order.set(null);
+          this.errorMessage.set(res.message || '');
         }
       },
-      error: () => {
+      error: (err) => {
         this.isLoading.set(false);
-        this.order.set({ ...this.mockOrderDetail, orderNumber });
-      }
+        this.order.set(null);
+        this.errorMessage.set(err.message || '');
+      },
     });
+  }
+
+  isTerminalBad(status: OrderStatus): boolean {
+    return status === 'CANCELLED' || status === 'RETURNED' || status === 'RETURN_REQUESTED';
+  }
+
+  canCancel(): boolean {
+    const s = this.order()?.status;
+    return s === 'PENDING' || s === 'CONFIRMED';
+  }
+
+  canPayOnline(): boolean {
+    const ord = this.order();
+    if (!ord) return false;
+    const isOnline = ord.paymentMethod === 'VNPAY' || ord.paymentMethod === 'MOMO';
+    const unpaid = !ord.paymentInfo || ord.paymentInfo.paymentStatus !== 'COMPLETED';
+    return isOnline && unpaid && (ord.status === 'PENDING' || ord.status === 'CONFIRMED');
   }
 
   getStatusText(status: OrderStatus): string {
     const map: Record<OrderStatus, string> = {
       PENDING: 'Chờ duyệt',
       CONFIRMED: 'Đã xác nhận',
+      PAID: 'Đã thanh toán',
       PREPARING: 'Đóng gói',
       SHIPPING: 'Đang giao',
       DELIVERED: 'Đã giao thành công',
       CANCELLED: 'Đã hủy',
-      RETURNED: 'Đã trả hàng'
+      RETURN_REQUESTED: 'Yêu cầu trả hàng',
+      RETURNED: 'Đã trả hàng',
     };
     return map[status];
   }
 
-  isStepActive(status: string): boolean {
-    return this.order()?.status === status;
+  getPaymentStatusText(status: string): string {
+    const map: Record<string, string> = {
+      PENDING: 'Chờ thanh toán',
+      COMPLETED: 'Đã thanh toán',
+      FAILED: 'Thất bại',
+      REFUNDED: 'Đã hoàn tiền',
+      PARTIALLY_REFUNDED: 'Hoàn tiền một phần',
+    };
+    return map[status] || status;
   }
 
-  isStepPassed(status: string): boolean {
-    const currentStatus = this.order()?.status;
-    if (!currentStatus) return false;
+  statusClass(status: OrderStatus): Record<string, boolean> {
+    return {
+      'bg-amber-100 text-amber-700': status === 'PENDING',
+      'bg-blue-100 text-blue-700': status === 'CONFIRMED',
+      'bg-teal-100 text-teal-700': status === 'PAID',
+      'bg-cyan-100 text-cyan-700': status === 'PREPARING',
+      'bg-indigo-100 text-indigo-700': status === 'SHIPPING',
+      'bg-emerald-100 text-emerald-700': status === 'DELIVERED',
+      'bg-red-100 text-red-700': status === 'CANCELLED',
+      'bg-orange-100 text-orange-700': status === 'RETURN_REQUESTED',
+      'bg-purple-100 text-purple-700': status === 'RETURNED',
+    };
+  }
 
-    const sequence = ['PENDING', 'CONFIRMED', 'PREPARING', 'SHIPPING', 'DELIVERED'];
-    const activeIndex = sequence.indexOf(currentStatus);
-    const stepIndex = sequence.indexOf(status);
-    
-    return stepIndex < activeIndex && stepIndex > -1;
+  isStepActive(step: TimelineStep): boolean {
+    const s = this.order()?.status;
+    return s != null && this.statusRank[s] === step.rank;
+  }
+
+  isStepPassed(step: TimelineStep): boolean {
+    const s = this.order()?.status;
+    return s != null && step.rank < this.statusRank[s];
   }
 
   getTimelineWidth(): string {
-    const currentStatus = this.order()?.status;
-    if (!currentStatus) return '0%';
-
-    const sequence = ['PENDING', 'CONFIRMED', 'PREPARING', 'SHIPPING', 'DELIVERED'];
-    const activeIndex = sequence.indexOf(currentStatus);
-    if (activeIndex <= 0) return '0%';
-    
-    // Width mapping percentage
-    const pct = (activeIndex / (sequence.length - 1)) * 100;
-    return `${pct}%`;
+    const s = this.order()?.status;
+    if (s == null) return '0%';
+    const rank = Math.max(0, this.statusRank[s]);
+    return `${(rank / 4) * 100}%`;
   }
 
-  getStepTime(status: string): string | undefined {
+  getStepTime(rank: number): string | undefined {
     const ord = this.order();
     if (!ord) return undefined;
-
-    if (status === 'PENDING') return ord.createdAt;
-    if (status === 'CONFIRMED') return ord.confirmedAt || ord.createdAt;
-    if (status === 'PREPARING') return ord.preparingAt;
-    if (status === 'SHIPPING') return ord.shippedAt;
-    if (status === 'DELIVERED') return ord.deliveredAt;
-    return undefined;
+    switch (rank) {
+      case 0: return ord.createdAt;
+      case 1: return ord.paidAt || ord.confirmedAt;
+      case 2: return ord.preparingAt;
+      case 3: return ord.shippedAt;
+      case 4: return ord.deliveredAt;
+      default: return undefined;
+    }
   }
 
-  triggerCancel() {
+  payNow(): void {
     const ord = this.order();
     if (!ord) return;
+    this.isProcessing.set(true);
+    this.paymentService
+      .initiatePayment({
+        orderNumber: ord.orderNumber,
+        paymentMethod: ord.paymentMethod as 'VNPAY' | 'MOMO',
+      })
+      .subscribe({
+        next: (res) => {
+          this.isProcessing.set(false);
+          if (res.success && res.data?.paymentUrl) {
+            window.open(res.data.paymentUrl, '_blank', 'noopener');
+          } else {
+            alert(res.message || 'Không khởi tạo được giao dịch thanh toán.');
+          }
+        },
+        error: (err) => {
+          this.isProcessing.set(false);
+          alert(err.message || 'Khởi tạo thanh toán thất bại.');
+        },
+      });
+  }
 
+  triggerCancel(): void {
+    const ord = this.order();
+    if (!ord) return;
     const reason = prompt('Nhập lý do bạn muốn hủy đơn hàng:');
     if (reason === null) return;
     if (!reason.trim()) {
-      alert('Vui lý do hủy đơn hàng!');
+      alert('Vui lòng nhập lý do hủy đơn hàng!');
       return;
     }
-
-    this.isLoading.set(true);
+    this.isProcessing.set(true);
     this.orderService.cancelOrder(ord.orderNumber, reason).subscribe({
       next: () => {
+        this.isProcessing.set(false);
         alert('Hủy đơn hàng thành công.');
         this.loadOrderDetail(ord.orderNumber);
       },
       error: (err) => {
-        this.isLoading.set(false);
+        this.isProcessing.set(false);
         alert(err.message || 'Hủy đơn hàng thất bại.');
-      }
+      },
     });
   }
 
-  triggerReturn() {
+  triggerReturn(): void {
     const ord = this.order();
     if (!ord) return;
-
     const reason = prompt('Nhập lý do hoàn trả hàng và hoàn tiền:');
     if (reason === null) return;
     if (!reason.trim()) {
       alert('Vui lòng nhập lý do trả hàng!');
       return;
     }
-
-    this.isLoading.set(true);
-    this.orderService.requestReturn(ord.orderNumber, { reason }).subscribe({
-      next: () => {
-        alert('Yêu cầu trả hàng hoàn tiền đã được gửi! CalmSKIN sẽ liên hệ lại trong vòng 24H để xử lý hoàn tiền.');
-        this.loadOrderDetail(ord.orderNumber);
-      },
-      error: (err) => {
-        this.isLoading.set(false);
-        alert(err.message || 'Yêu cầu trả hàng thất bại.');
-      }
-    });
+    this.isProcessing.set(true);
+    this.orderService
+      .requestReturn(ord.orderNumber, {
+        reason,
+        items: ord.items.map(item => ({ orderItemId: item.id, quantity: item.quantity })),
+      })
+      .subscribe({
+        next: () => {
+          this.isProcessing.set(false);
+          alert('Yêu cầu trả hàng đã được gửi! CalmSKIN sẽ liên hệ lại trong vòng 24H để xử lý hoàn tiền.');
+          this.loadOrderDetail(ord.orderNumber);
+        },
+        error: (err) => {
+          this.isProcessing.set(false);
+          alert(err.message || 'Yêu cầu trả hàng thất bại.');
+        },
+      });
   }
 }

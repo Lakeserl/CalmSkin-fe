@@ -1,5 +1,6 @@
 export interface UserDTO {
-  id: number;
+  /** User UUID (user-service primary key). */
+  id: string;
   email: string;
   phoneNumber?: string;
   fullName: string;
@@ -34,31 +35,59 @@ export interface ChangePasswordRequest {
   newPassword?: string;
 }
 
+/** Mirrors user-service AddressResponse (`/api/v1/users/me/addresses`). */
 export interface AddressDTO {
-  id: number;
+  /** Address UUID. */
+  id: string;
   recipientName: string;
-  recipientPhone: string;
+  phone: string;
   province: string;
   district: string;
   ward: string;
-  streetAddress: string;
+  street: string;
+  postalCode?: string;
   isDefault: boolean;
 }
 
+/** Mirrors user-service AddressRequest. */
 export interface AddressRequest {
   recipientName: string;
-  recipientPhone: string;
+  phone: string;
   province: string;
   district: string;
   ward: string;
-  streetAddress: string;
+  street: string;
+  postalCode?: string;
   isDefault: boolean;
 }
 
+/**
+ * Legacy view-layer shape. Real BE field is `type` (not `transactionType`);
+ * mapped at the service layer in `AuthService.getLoyaltyHistory()`.
+ */
 export interface LoyaltyTransactionDTO {
-  id: number;
+  id: string;
   points: number;
-  transactionType: 'EARN' | 'SPEND' | 'REFUND';
+  transactionType: 'EARN' | 'SPEND' | 'REFUND' | 'EXPIRE' | 'BONUS' | 'ADJUSTMENT';
   description: string;
   createdAt: string;
+}
+
+export interface RegisterRequest {
+  email?: string;
+  password?: string;
+  fullName?: string;
+  phoneNumber?: string;
+  /** Phone-OTP quick-register flow used by the login screen. */
+  quickLogin?: boolean;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  newPassword: string;
 }

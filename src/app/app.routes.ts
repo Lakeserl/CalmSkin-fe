@@ -3,6 +3,7 @@ import { MainLayoutComponent } from './shared/layouts/main-layout.component';
 import { AdminLayoutComponent } from './shared/layouts/admin-layout.component';
 import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard';
+import { notificationRoutes } from './features/notifications/routes/notification.routes';
 
 export const routes: Routes = [
   // Customer facing pages (wrapped with Header/Footer)
@@ -21,6 +22,14 @@ export const routes: Routes = [
       {
         path: 'register',
         loadComponent: () => import('./views/auth/register/register.component').then(m => m.RegisterComponent)
+      },
+      {
+        path: 'forgot-password',
+        loadComponent: () => import('./views/auth/forgot-password/forgot-password.component').then(m => m.ForgotPasswordComponent)
+      },
+      {
+        path: 'reset-password',
+        loadComponent: () => import('./views/auth/reset-password/reset-password.component').then(m => m.ResetPasswordComponent)
       },
       {
         path: 'products',
@@ -53,6 +62,39 @@ export const routes: Routes = [
         path: 'profile',
         loadComponent: () => import('./views/profile/profile.component').then(m => m.ProfileComponent),
         canActivate: [authGuard]
+      },
+      {
+        path: 'flash-sales',
+        loadComponent: () => import('./views/promotions/flash-sale-page.component').then(m => m.FlashSalePageComponent)
+      },
+      {
+        path: 'profile/wishlist',
+        loadComponent: () => import('./views/profile/wishlist/wishlist.component').then(m => m.WishlistComponent),
+        canActivate: [authGuard]
+      },
+      {
+        path: 'profile/vouchers',
+        loadComponent: () => import('./views/profile/vouchers/vouchers.component').then(m => m.VouchersComponent),
+        canActivate: [authGuard]
+      },
+      {
+        path: 'profile/points',
+        loadComponent: () => import('./views/profile/points/points-history.component').then(m => m.PointsHistoryComponent),
+        canActivate: [authGuard]
+      },
+      {
+        path: 'profile/sessions',
+        loadComponent: () => import('./views/profile/sessions/sessions.component').then(m => m.SessionsComponent),
+        canActivate: [authGuard]
+      },
+      {
+        path: 'profile/skin',
+        loadComponent: () => import('./views/profile/skin-profile/skin-profile.component').then(m => m.SkinProfileComponent),
+        canActivate: [authGuard]
+      },
+      {
+        path: 'notifications',
+        children: notificationRoutes
       }
     ]
   },
@@ -81,8 +123,25 @@ export const routes: Routes = [
         loadComponent: () => import('./views/admin/orders/admin-orders.component').then(m => m.AdminOrdersComponent)
       },
       {
+        path: 'payments',
+        loadComponent: () => import('./views/admin/payments/admin-payments.component').then(m => m.AdminPaymentsComponent)
+      },
+      {
         path: 'inventory',
         loadComponent: () => import('./views/admin/inventory/admin-inventory.component').then(m => m.AdminInventoryComponent)
+      },
+      {
+        path: 'users',
+        loadComponent: () => import('./views/admin/users/admin-users.component').then(m => m.AdminUsersComponent)
+      },
+      {
+        path: 'promotions',
+        loadComponent: () => import('./views/admin/promotions/admin-promotions.component').then(m => m.AdminPromotionsComponent)
+      },
+      {
+        path: 'notifications',
+        loadComponent: () =>
+          import('./features/notifications/component/admin-notifications.component').then(m => m.AdminNotificationsComponent)
       }
     ]
   },

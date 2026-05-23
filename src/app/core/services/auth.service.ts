@@ -1,7 +1,19 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
-import { ApiService } from './api.service';
-import { AuthResponse, UserDTO, UpdateProfileRequest, ChangePasswordRequest, AddressDTO, AddressRequest, LoyaltyTransactionDTO } from '../models/auth.model';
-import { Observable, tap, catchError, throwError, of } from 'rxjs';
+import { ApiService, ApiResponse } from './api.service';
+import {
+  AuthResponse,
+  UserDTO,
+  UpdateProfileRequest,
+  ChangePasswordRequest,
+  AddressDTO,
+  AddressRequest,
+  LoyaltyTransactionDTO,
+  RegisterRequest,
+  LoginRequest,
+  ResetPasswordRequest,
+} from '../models/auth.model';
+import { SpringPage } from './order.service';
+import { Observable, tap, catchError, throwError, of, map } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
@@ -21,19 +33,19 @@ export class AuthService {
     this.checkAutoLogin();
   }
 
-  register(data: any): Observable<any> {
+  register(data: RegisterRequest): Observable<ApiResponse<void>> {
     return this.api.post<void>('/api/v1/auth/register', data);
   }
 
-  verifyEmail(email: string, otp: string): Observable<any> {
+  verifyEmail(email: string, otp: string): Observable<ApiResponse<void>> {
     return this.api.post<void>('/api/v1/auth/verify-email', { email, otp });
   }
 
-  resendVerification(email: string): Observable<any> {
+  resendVerification(email: string): Observable<ApiResponse<void>> {
     return this.api.post<void>('/api/v1/auth/resend-verification', { email });
   }
 
-  login(data: any): Observable<any> {
+  login(data: LoginRequest): Observable<ApiResponse<AuthResponse>> {
     return this.api.post<AuthResponse>('/api/v1/auth/login', data).pipe(
       tap(res => {
         if (res.success && res.data) {
@@ -43,7 +55,7 @@ export class AuthService {
     );
   }
 
-  loginWithOtp(phoneNumber: string, otp: string): Observable<any> {
+  loginWithOtp(phoneNumber: string, otp: string): Observable<ApiResponse<AuthResponse>> {
     return this.api.post<AuthResponse>('/api/v1/auth/login/otp', { phoneNumber, otp }).pipe(
       tap(res => {
         if (res.success && res.data) {
@@ -62,7 +74,14 @@ export class AuthService {
     this.clearAuth();
   }
 
-  refreshToken(): Observable<any> {
+  /** Revokes every refresh token for the current user. Local state cleared regardless. */
+  logoutAll(): Observable<ApiResponse<void>> {
+    return this.api.post<void>('/api/v1/auth/logout-all', {}).pipe(
+      tap(() => this.clearAuth())
+    );
+  }
+
+  refreshToken(): Observable<ApiResponse<AuthResponse>> {
     const rt = localStorage.getItem('calmskin_refresh_token');
     if (!rt) return throwError(() => new Error('No refresh token'));
 
@@ -79,16 +98,16 @@ export class AuthService {
     );
   }
 
-  forgotPassword(email: string): Observable<any> {
+  forgotPassword(email: string): Observable<ApiResponse<void>> {
     return this.api.post<void>('/api/v1/auth/forgot-password', { email });
   }
 
-  resetPassword(data: any): Observable<any> {
+  resetPassword(data: ResetPasswordRequest): Observable<ApiResponse<void>> {
     return this.api.post<void>('/api/v1/auth/reset-password', data);
   }
 
   // Profile management
-  getProfile(): Observable<any> {
+  getProfile(): Observable<ApiResponse<UserDTO>> {
     return this.api.get<UserDTO>('/api/v1/users/me').pipe(
       tap(res => {
         if (res.success && res.data) {
@@ -98,7 +117,7 @@ export class AuthService {
     );
   }
 
-  updateProfile(data: UpdateProfileRequest): Observable<any> {
+  updateProfile(data: UpdateProfileRequest): Observable<ApiResponse<UserDTO>> {
     return this.api.put<UserDTO>('/api/v1/users/me', data).pipe(
       tap(res => {
         if (res.success && res.data) {
@@ -108,11 +127,11 @@ export class AuthService {
     );
   }
 
-  changePassword(data: ChangePasswordRequest): Observable<any> {
+  changePassword(data: ChangePasswordRequest): Observable<ApiResponse<void>> {
     return this.api.post<void>('/api/v1/users/me/change-password', data);
   }
 
-  uploadAvatar(file: File): Observable<any> {
+  uploadAvatar(file: File): Observable<ApiResponse<string>> {
     const formData = new FormData();
     formData.append('file', file);
     return this.api.post<string>('/api/v1/users/me/avatar', formData).pipe(
@@ -127,7 +146,7 @@ export class AuthService {
     );
   }
 
-  deleteAvatar(): Observable<any> {
+  deleteAvatar(): Observable<ApiResponse<void>> {
     return this.api.delete<void>('/api/v1/users/me/avatar').pipe(
       tap(res => {
         if (res.success) {
@@ -137,6 +156,20 @@ export class AuthService {
           }
         }
       })
+    );
+  }
+
+  /** Soft-deactivate — account becomes INACTIVE but data is retained. */
+  deactivateAccount(): Observable<ApiResponse<void>> {
+    return this.api.patch<void>('/api/v1/users/me/deactivate', {}).pipe(
+      tap(() => this.clearAuth())
+    );
+  }
+
+  /** Hard-delete the account; cannot be undone. */
+  deleteAccount(): Observable<ApiResponse<void>> {
+    return this.api.delete<void>('/api/v1/users/me/account').pipe(
+      tap(() => this.clearAuth())
     );
   }
 
@@ -175,25 +208,46 @@ export class AuthService {
   }
 
   // Sổ Địa chỉ nhận hàng
-  getUserAddresses(): Observable<any> {
+  getUserAddresses(): Observable<ApiResponse<AddressDTO[]>> {
     return this.api.get<AddressDTO[]>('/api/v1/users/me/addresses');
   }
 
-  addAddress(data: AddressRequest): Observable<any> {
+  addAddress(data: AddressRequest): Observable<ApiResponse<AddressDTO>> {
     return this.api.post<AddressDTO>('/api/v1/users/me/addresses', data);
   }
 
-  deleteAddress(addressId: number): Observable<any> {
+  updateAddress(addressId: string, data: AddressRequest): Observable<ApiResponse<AddressDTO>> {
+    return this.api.put<AddressDTO>(`/api/v1/users/me/addresses/${addressId}`, data);
+  }
+
+  setDefaultAddress(addressId: string): Observable<ApiResponse<AddressDTO>> {
+    return this.api.patch<AddressDTO>(`/api/v1/users/me/addresses/${addressId}/default`, {});
+  }
+
+  deleteAddress(addressId: string): Observable<ApiResponse<void>> {
     return this.api.delete<void>(`/api/v1/users/me/addresses/${addressId}`);
   }
 
-  // Nhật ký xu tích lũy Loyalty
-  getLoyaltyHistory(): Observable<any> {
-    return this.api.get<LoyaltyTransactionDTO[]>('/api/v1/users/me/loyalty-history');
+  // Loyalty point history — BE returns Spring Page<PointTransaction>. We
+  // flatten to a list and re-shape to the legacy LoyaltyTransactionDTO so
+  // existing callers (e.g. profile.component.ts) keep working.
+  getLoyaltyHistory(page = 0, size = 50): Observable<ApiResponse<LoyaltyTransactionDTO[]>> {
+    return this.api.get<SpringPage<any>>('/api/v1/users/me/points/transactions', { page, size }).pipe(
+      map(res => ({
+        ...res,
+        data: (res.data?.content ?? []).map((tx: any) => ({
+          id: tx.id,
+          points: tx.points,
+          transactionType: tx.type,
+          description: tx.description,
+          createdAt: tx.createdAt
+        } as unknown as LoyaltyTransactionDTO))
+      }))
+    );
   }
 
   // Cập nhật Avatar bằng URL
-  updateAvatar(url: string): Observable<any> {
+  updateAvatar(url: string): Observable<ApiResponse<UserDTO>> {
     return this.api.put<UserDTO>('/api/v1/users/me', { avatarUrl: url }).pipe(
       tap(res => {
         if (res.success && res.data) {

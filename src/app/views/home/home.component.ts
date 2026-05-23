@@ -1,6 +1,7 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ProductService } from '../../core/services/product.service';
 import { CartService } from '../../core/services/cart.service';
 import { LanguageService } from '../../core/services/language.service';
@@ -10,6 +11,7 @@ import { ProductSummaryDTO } from '../../core/models/product.model';
 @Component({
   selector: 'app-home',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule, RouterLink, TranslatePipe],
   template: `
     <div class="space-y-16 md:space-y-24 pb-20">
@@ -461,34 +463,36 @@ export class HomeComponent implements OnInit {
     }
   ];
 
+  private readonly destroyRef = inject(DestroyRef);
+
   ngOnInit(): void {
     // Load Best Sellers
-    this.productService.getBestSellers(0, 4).subscribe({
-      next: (res) => {
-        if (res.success && res.data && res.data.content && res.data.content.length > 0) {
-          this.bestSellers.set(res.data.content);
-        } else {
-          this.bestSellers.set(this.mockBestSellers);
-        }
-      },
-      error: () => {
-        this.bestSellers.set(this.mockBestSellers);
-      }
-    });
+    this.productService.getBestSellers(0, 4)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res) => {
+          if (res.success && res.data?.content?.length) {
+            this.bestSellers.set(res.data.content);
+          } else {
+            this.bestSellers.set(this.mockBestSellers);
+          }
+        },
+        error: () => this.bestSellers.set(this.mockBestSellers),
+      });
 
     // Load New Arrivals
-    this.productService.getNewArrivals(0, 4).subscribe({
-      next: (res) => {
-        if (res.success && res.data && res.data.content && res.data.content.length > 0) {
-          this.newArrivals.set(res.data.content);
-        } else {
-          this.newArrivals.set(this.mockNewArrivals);
-        }
-      },
-      error: () => {
-        this.newArrivals.set(this.mockNewArrivals);
-      }
-    });
+    this.productService.getNewArrivals(0, 4)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res) => {
+          if (res.success && res.data?.content?.length) {
+            this.newArrivals.set(res.data.content);
+          } else {
+            this.newArrivals.set(this.mockNewArrivals);
+          }
+        },
+        error: () => this.newArrivals.set(this.mockNewArrivals),
+      });
   }
 
   addToCart(product: ProductSummaryDTO) {

@@ -1,7 +1,8 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, OnInit, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../core/services/auth.service';
 import { OrderService, VietnamRegion } from '../../core/services/order.service';
 import { LanguageService } from '../../core/services/language.service';
@@ -11,7 +12,7 @@ import { UserDTO, AddressDTO, LoyaltyTransactionDTO } from '../../core/models/au
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [CommonModule, FormsModule, TranslatePipe],
+  imports: [CommonModule, FormsModule, TranslatePipe, RouterLink],
   template: `
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 animate-fade-in">
       <h1 class="text-3xl font-serif text-brand-charcoal mb-8 border-b pb-4">{{ 'profile.title' | translate }}</h1>
@@ -64,6 +65,24 @@ import { UserDTO, AddressDTO, LoyaltyTransactionDTO } from '../../core/models/au
               </button>
               <button (click)="activeTab.set('address')" [class.text-brand-fuchsia]="activeTab() === 'address'" class="w-full text-left py-1 hover:text-brand-fuchsia focus:outline-none">
                 {{ 'profile.tabAddress' | translate }}
+              </button>
+              <a routerLink="/profile/wishlist" class="block py-1 hover:text-brand-fuchsia">
+                {{ lang.currentLang() === 'vi' ? 'Yêu thích' : 'Wishlist' }}
+              </a>
+              <a routerLink="/profile/vouchers" class="block py-1 hover:text-brand-fuchsia">
+                {{ lang.currentLang() === 'vi' ? 'Ví voucher' : 'My vouchers' }}
+              </a>
+              <a routerLink="/profile/points" class="block py-1 hover:text-brand-fuchsia">
+                {{ lang.currentLang() === 'vi' ? 'Lịch sử điểm thưởng' : 'Points history' }}
+              </a>
+              <a routerLink="/profile/skin" class="block py-1 hover:text-brand-fuchsia">
+                {{ lang.currentLang() === 'vi' ? 'Hồ sơ da' : 'Skin profile' }}
+              </a>
+              <a routerLink="/profile/sessions" class="block py-1 hover:text-brand-fuchsia">
+                {{ lang.currentLang() === 'vi' ? 'Phiên đăng nhập' : 'Sessions' }}
+              </a>
+              <button (click)="activeTab.set('security')" [class.text-brand-fuchsia]="activeTab() === 'security'" class="w-full text-left py-1 hover:text-brand-fuchsia focus:outline-none">
+                {{ lang.currentLang() === 'vi' ? 'Bảo mật / Xóa tài khoản' : 'Security / Delete account' }}
               </button>
               <button (click)="logout()" class="w-full text-left py-1 text-red-500 hover:underline border-t mt-2 pt-2 focus:outline-none">
                 {{ 'nav.logout' | translate }}
@@ -256,7 +275,7 @@ import { UserDTO, AddressDTO, LoyaltyTransactionDTO } from '../../core/models/au
                     <div class="space-y-1.5">
                       <div class="flex items-center space-x-2">
                         <strong class="text-brand-charcoal">{{ addr.recipientName }}</strong>
-                        <span class="text-brand-muted">| {{ addr.recipientPhone }}</span>
+                        <span class="text-brand-muted">| {{ addr.phone }}</span>
                         @if (addr.isDefault) {
                           <span class="bg-brand-fuchsia/10 text-brand-fuchsia-dark text-[8px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider">
                             {{ 'profile.addrIsDefault' | translate }}
@@ -264,20 +283,65 @@ import { UserDTO, AddressDTO, LoyaltyTransactionDTO } from '../../core/models/au
                         }
                       </div>
                       <p class="text-brand-muted leading-relaxed font-medium">
-                        {{ addr.streetAddress }}, {{ addr.ward }}, {{ addr.district }}, {{ addr.province }}
+                        {{ addr.street }}, {{ addr.ward }}, {{ addr.district }}, {{ addr.province }}
                       </p>
                     </div>
 
-                    <button 
-                      (click)="deleteAddress(addr.id)"
-                      class="text-red-500 hover:underline font-bold text-[10px] shrink-0 focus:outline-none"
-                    >
-                      {{ 'profile.addrDelete' | translate }}
-                    </button>
+                    <div class="flex flex-col items-end gap-1 shrink-0">
+                      @if (!addr.isDefault) {
+                        <button (click)="setDefaultAddress(addr.id)"
+                                class="text-brand-fuchsia hover:underline font-bold text-[10px] focus:outline-none">
+                          {{ lang.currentLang() === 'vi' ? 'Đặt mặc định' : 'Set default' }}
+                        </button>
+                      }
+                      <button (click)="deleteAddress(addr.id)"
+                              class="text-red-500 hover:underline font-bold text-[10px] focus:outline-none">
+                        {{ 'profile.addrDelete' | translate }}
+                      </button>
+                    </div>
                   </div>
                 }
               </div>
 
+            </div>
+          }
+
+          <!-- Tab 4: Security / Danger zone -->
+          @if (activeTab() === 'security') {
+            <div class="bg-white p-6 rounded-skincare border border-red-200 shadow-sm space-y-6 animate-fade-in text-xs">
+              <h3 class="text-lg font-serif font-bold text-brand-charcoal border-b pb-2">
+                {{ lang.currentLang() === 'vi' ? 'Khu vực nguy hiểm' : 'Danger zone' }}
+              </h3>
+
+              <div class="space-y-1">
+                <p class="font-bold text-brand-charcoal">
+                  {{ lang.currentLang() === 'vi' ? 'Tạm khóa tài khoản' : 'Deactivate account' }}
+                </p>
+                <p class="text-brand-muted leading-relaxed">
+                  {{ lang.currentLang() === 'vi'
+                    ? 'Tài khoản bị tạm khóa sẽ không đăng nhập được. Dữ liệu giữ lại để khôi phục sau này.'
+                    : 'Your account will be disabled. Data is retained so it can be restored by support later.' }}
+                </p>
+                <button (click)="onDeactivate()"
+                        class="mt-2 px-4 py-2 border border-stone-300 text-brand-charcoal rounded-full font-bold text-[10px] hover:bg-stone-50">
+                  {{ lang.currentLang() === 'vi' ? 'Tạm khóa tài khoản' : 'Deactivate' }}
+                </button>
+              </div>
+
+              <div class="space-y-1 border-t pt-4">
+                <p class="font-bold text-red-600">
+                  {{ lang.currentLang() === 'vi' ? 'Xóa vĩnh viễn' : 'Delete permanently' }}
+                </p>
+                <p class="text-brand-muted leading-relaxed">
+                  {{ lang.currentLang() === 'vi'
+                    ? 'Hành động này không thể hoàn tác. Toàn bộ dữ liệu, đơn hàng và điểm thưởng sẽ bị xóa.'
+                    : 'This cannot be undone. All your data, orders and points will be removed.' }}
+                </p>
+                <button (click)="onDeleteAccount()"
+                        class="mt-2 px-4 py-2 bg-red-500 text-white rounded-full font-bold text-[10px] hover:bg-red-600">
+                  {{ lang.currentLang() === 'vi' ? 'Xóa tài khoản' : 'Delete account' }}
+                </button>
+              </div>
             </div>
           }
 
@@ -291,13 +355,14 @@ export class ProfileComponent implements OnInit {
   private readonly authService = inject(AuthService);
   private readonly orderService = inject(OrderService);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
   readonly lang = inject(LanguageService);
 
   readonly profile = signal<UserDTO | null>(null);
   readonly addresses = signal<AddressDTO[]>([]);
   readonly loyaltyHistory = signal<LoyaltyTransactionDTO[]>([]);
-  
-  readonly activeTab = signal<'profile' | 'loyalty' | 'address'>('profile');
+
+  readonly activeTab = signal<'profile' | 'loyalty' | 'address' | 'security'>('profile');
   readonly isSubmitting = signal(false);
   readonly showAddAddress = signal(false);
 
@@ -318,23 +383,6 @@ export class ProfileComponent implements OnInit {
   filteredDistricts: { name: string; wards: string[] }[] = [];
   filteredWards: string[] = [];
 
-  private readonly mockAddresses: AddressDTO[] = [
-    {
-      id: 991,
-      recipientName: 'Khánh Linh',
-      recipientPhone: '0987654321',
-      province: 'Hồ Chí Minh',
-      district: 'Quận 1',
-      ward: 'Bến Nghé',
-      streetAddress: '15 Lê Lợi',
-      isDefault: true
-    }
-  ];
-
-  private readonly mockLoyaltyTx: LoyaltyTransactionDTO[] = [
-    { id: 701, points: 100, transactionType: 'EARN', description: 'Điểm thưởng đăng ký thành viên mới CalmSKIN', createdAt: new Date().toISOString() }
-  ];
-
   ngOnInit(): void {
     this.provinces = this.orderService.getVietnamRegions();
     this.loadUserData();
@@ -350,21 +398,19 @@ export class ProfileComponent implements OnInit {
       this.dateOfBirth = u.dateOfBirth || '';
     }
 
-    this.authService.getUserAddresses().subscribe(res => {
-      if (res.success && res.data && res.data.length > 0) {
-        this.addresses.set(res.data);
-      } else {
-        this.addresses.set(this.mockAddresses);
-      }
-    });
+    this.authService.getUserAddresses()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res) => this.addresses.set(res.data ?? []),
+        error: () => this.addresses.set([]),
+      });
 
-    this.authService.getLoyaltyHistory().subscribe(res => {
-      if (res.success && res.data) {
-        this.loyaltyHistory.set(res.data);
-      } else {
-        this.loyaltyHistory.set(this.mockLoyaltyTx);
-      }
-    });
+    this.authService.getLoyaltyHistory()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res) => this.loyaltyHistory.set(res.data ?? []),
+        error: () => this.loyaltyHistory.set([]),
+      });
   }
 
   getTierProgress(): string {
@@ -405,20 +451,22 @@ export class ProfileComponent implements OnInit {
       dateOfBirth: this.dateOfBirth
     };
 
-    this.authService.updateProfile(payload).subscribe({
-      next: () => {
-        this.isSubmitting.set(false);
-        alert(this.lang.currentLang() === 'vi' 
-          ? 'Cập nhật thông tin cá nhân thành công!' 
-          : 'Personal profile updated successfully!'
-        );
-        this.loadUserData();
-      },
-      error: (err) => {
-        this.isSubmitting.set(false);
-        alert(err.message || 'Cập nhật thất bại.');
-      }
-    });
+    this.authService.updateProfile(payload)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.isSubmitting.set(false);
+          alert(this.lang.currentLang() === 'vi'
+            ? 'Cập nhật thông tin cá nhân thành công!'
+            : 'Personal profile updated successfully!'
+          );
+          this.loadUserData();
+        },
+        error: (err) => {
+          this.isSubmitting.set(false);
+          alert(err?.message || 'Cập nhật thất bại.');
+        },
+      });
   }
 
   onAddAddress() {
@@ -432,42 +480,27 @@ export class ProfileComponent implements OnInit {
 
     const payload = {
       recipientName: this.newAddressName,
-      recipientPhone: this.newAddressPhone,
+      phone: this.newAddressPhone,
       province: this.selectedProvince,
       district: this.selectedDistrict,
       ward: this.selectedWard,
-      streetAddress: this.newStreet,
+      street: this.newStreet,
       isDefault: this.newIsDefault
     };
 
-    this.authService.addAddress(payload).subscribe({
-      next: () => {
-        alert(this.lang.currentLang() === 'vi' ? 'Thêm địa chỉ mới thành công.' : 'Added new address successfully.');
-        this.showAddAddress.set(false);
-        this.clearAddressForm();
-        this.loadUserData();
-      },
-      error: () => {
-        const id = Math.floor(Math.random() * 1000);
-        const mappedAddr: AddressDTO = {
-          id,
-          recipientName: payload.recipientName,
-          recipientPhone: payload.recipientPhone,
-          province: payload.province,
-          district: payload.district,
-          ward: payload.ward,
-          streetAddress: payload.streetAddress,
-          isDefault: payload.isDefault
-        };
-        this.addresses.set([...this.addresses(), mappedAddr]);
-        this.showAddAddress.set(false);
-        this.clearAddressForm();
-        alert(this.lang.currentLang() === 'vi' 
-          ? 'Địa chỉ mới đã được ghi nhận giả lập!' 
-          : 'New address recorded mockingly!'
-        );
-      }
-    });
+    this.authService.addAddress(payload)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          alert(this.lang.currentLang() === 'vi' ? 'Thêm địa chỉ mới thành công.' : 'Added new address successfully.');
+          this.showAddAddress.set(false);
+          this.clearAddressForm();
+          this.loadUserData();
+        },
+        error: (err) => {
+          alert(err?.message || (this.lang.currentLang() === 'vi' ? 'Thêm địa chỉ thất bại.' : 'Failed to add address.'));
+        },
+      });
   }
 
   private clearAddressForm() {
@@ -480,47 +513,82 @@ export class ProfileComponent implements OnInit {
     this.newIsDefault = false;
   }
 
-  deleteAddress(addressId: number) {
+  deleteAddress(addressId: string) {
     if (!confirm(this.lang.currentLang() === 'vi' 
       ? 'Bạn có chắc chắn muốn xóa địa chỉ nhận hàng này?' 
       : 'Are you sure you want to delete this shipping address?'
     )) return;
 
-    this.authService.deleteAddress(addressId).subscribe({
-      next: () => {
-        alert(this.lang.currentLang() === 'vi' ? 'Xóa địa chỉ thành công.' : 'Deleted address successfully.');
-        this.loadUserData();
-      },
-      error: () => {
-        this.addresses.set(this.addresses().filter(a => a.id !== addressId));
-        alert(this.lang.currentLang() === 'vi' ? 'Đã xóa địa chỉ thành công!' : 'Deleted address successfully!');
-      }
-    });
+    this.authService.deleteAddress(addressId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          alert(this.lang.currentLang() === 'vi' ? 'Xóa địa chỉ thành công.' : 'Deleted address successfully.');
+          this.loadUserData();
+        },
+        error: (err) => {
+          alert(err?.message || (this.lang.currentLang() === 'vi' ? 'Xóa địa chỉ thất bại.' : 'Failed to delete address.'));
+        },
+      });
   }
 
   uploadAvatar() {
-    const url = prompt(this.lang.currentLang() === 'vi' 
-      ? 'Nhập đường dẫn URL ảnh đại diện mới của bạn:' 
+    const url = prompt(this.lang.currentLang() === 'vi'
+      ? 'Nhập đường dẫn URL ảnh đại diện mới của bạn:'
       : 'Enter your new avatar image URL:'
     );
     if (!url) return;
 
-    this.authService.updateAvatar(url).subscribe({
-      next: () => {
-        alert(this.lang.currentLang() === 'vi' ? 'Thay đổi ảnh đại diện thành công!' : 'Avatar changed successfully!');
-        this.loadUserData();
-      },
-      error: () => {
-        alert(this.lang.currentLang() === 'vi' ? 'Đổi ảnh đại diện giả lập thành công.' : 'Changed avatar mockingly.');
-        if (this.profile()) {
-          this.profile()!.avatarUrl = url;
-        }
-      }
-    });
+    this.authService.updateAvatar(url)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          alert(this.lang.currentLang() === 'vi' ? 'Thay đổi ảnh đại diện thành công!' : 'Avatar changed successfully!');
+          this.loadUserData();
+        },
+        error: (err) => {
+          alert(err?.message || (this.lang.currentLang() === 'vi' ? 'Đổi ảnh đại diện thất bại.' : 'Failed to update avatar.'));
+        },
+      });
   }
 
   logout() {
     this.authService.logout();
     this.router.navigate(['/']);
+  }
+
+  setDefaultAddress(addressId: string) {
+    this.authService.setDefaultAddress(addressId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => this.loadUserData(),
+        error: () => alert(this.lang.currentLang() === 'vi' ? 'Đặt mặc định thất bại' : 'Failed to set default'),
+      });
+  }
+
+  onDeactivate() {
+    if (!confirm(this.lang.currentLang() === 'vi'
+      ? 'Bạn chắc chắn muốn tạm khóa tài khoản? Bạn sẽ bị đăng xuất.'
+      : 'Are you sure you want to deactivate your account? You will be signed out.')) return;
+    this.authService.deactivateAccount()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => this.router.navigate(['/']),
+        error: () => alert(this.lang.currentLang() === 'vi' ? 'Thao tác thất bại' : 'Operation failed'),
+      });
+  }
+
+  onDeleteAccount() {
+    const confirmTxt = this.lang.currentLang() === 'vi'
+      ? 'Nhập "DELETE" để xác nhận xóa vĩnh viễn tài khoản:'
+      : 'Type "DELETE" to permanently delete your account:';
+    const typed = prompt(confirmTxt);
+    if (typed !== 'DELETE') return;
+    this.authService.deleteAccount()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => this.router.navigate(['/']),
+        error: () => alert(this.lang.currentLang() === 'vi' ? 'Xóa tài khoản thất bại' : 'Delete failed'),
+      });
   }
 }

@@ -1,7 +1,24 @@
 import { Injectable, inject } from '@angular/core';
-import { ApiService } from './api.service';
-import { CreateOrderRequest, OrderDTO, OrderSummaryDTO } from '../models/order.model';
 import { Observable } from 'rxjs';
+import { ApiResponse, ApiService } from './api.service';
+import {
+  CreateOrderRequest,
+  OrderDTO,
+  OrderSummaryDTO,
+  ReturnOrderRequest,
+} from '../models/order.model';
+
+/** Subset of Spring's `Page<T>` JSON, as serialised by order-service. */
+export interface SpringPage<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+  first: boolean;
+  last: boolean;
+  empty: boolean;
+}
 
 export interface VietnamRegion {
   name: string;
@@ -11,31 +28,36 @@ export interface VietnamRegion {
   }[];
 }
 
-@Injectable({
-  providedIn: 'root'
-})
+@Injectable({ providedIn: 'root' })
 export class OrderService {
   private readonly api = inject(ApiService);
 
-  createOrder(request: CreateOrderRequest): Observable<any> {
+  createOrder(request: CreateOrderRequest): Observable<ApiResponse<OrderDTO>> {
     return this.api.post<OrderDTO>('/api/v1/orders', request);
   }
 
-  getOrderDetail(orderNumber: string): Observable<any> {
+  getOrderDetail(orderNumber: string): Observable<ApiResponse<OrderDTO>> {
     return this.api.get<OrderDTO>(`/api/v1/orders/${orderNumber}`);
   }
 
-  getUserOrders(status?: string, page: number = 0, size: number = 10): Observable<any> {
-    const params: any = { page, size };
-    if (status) params.status = status;
-    return this.api.get<any>('/api/v1/orders', params);
+  getUserOrders(
+    status?: string,
+    page = 0,
+    size = 10,
+  ): Observable<ApiResponse<SpringPage<OrderSummaryDTO>>> {
+    const params: Record<string, string | number> = { page, size };
+    if (status) params['status'] = status;
+    return this.api.get<SpringPage<OrderSummaryDTO>>('/api/v1/orders', params);
   }
 
-  cancelOrder(orderNumber: string, reason: string): Observable<any> {
+  cancelOrder(orderNumber: string, reason: string): Observable<ApiResponse<void>> {
     return this.api.post<void>(`/api/v1/orders/${orderNumber}/cancel`, { reason });
   }
 
-  requestReturn(orderNumber: string, data: any): Observable<any> {
+  requestReturn(
+    orderNumber: string,
+    data: ReturnOrderRequest,
+  ): Observable<ApiResponse<void>> {
     return this.api.post<void>(`/api/v1/orders/${orderNumber}/return`, data);
   }
 

@@ -2,7 +2,7 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { OrderService } from '../../../core/services/order.service';
-import { OrderDTO, OrderStatus } from '../../../core/models/order.model';
+import { OrderStatus, OrderSummaryDTO } from '../../../core/models/order.model';
 
 @Component({
   selector: 'app-order-history',
@@ -15,7 +15,7 @@ import { OrderDTO, OrderStatus } from '../../../core/models/order.model';
       <!-- Tabs Selector -->
       <div class="flex border-b border-brand-fuchsia-light/20 overflow-x-auto space-x-4 mb-6 scrollbar-hide text-xs sm:text-sm font-semibold shrink-0">
         @for (tab of statusTabs; track tab.value) {
-          <button 
+          <button
             (click)="selectTab(tab.value)"
             [class.border-brand-fuchsia]="activeTab() === tab.value"
             [class.text-brand-fuchsia-dark]="activeTab() === tab.value"
@@ -26,15 +26,19 @@ import { OrderDTO, OrderStatus } from '../../../core/models/order.model';
         }
       </div>
 
-      <!-- Loading State -->
       @if (isLoading()) {
         <div class="space-y-4 animate-pulse">
-          @for (skel of [1,2]; track skel) {
-            <div class="bg-stone-50 rounded-skincare h-36 border"></div>
+          @for (skel of [1,2,3]; track skel) {
+            <div class="bg-stone-50 rounded-skincare h-28 border"></div>
           }
         </div>
-      } @else if (filteredOrders().length === 0) {
-        <!-- Empty list -->
+      } @else if (errorMessage()) {
+        <div class="text-center py-16 bg-red-50 border border-red-100 rounded-skincare p-8 max-w-md mx-auto space-y-3">
+          <h3 class="text-sm font-semibold text-red-700">Không tải được danh sách đơn hàng</h3>
+          <p class="text-xs text-red-600">{{ errorMessage() }}</p>
+          <button (click)="loadOrders()" class="px-5 py-2 btn-fuchsia-glow rounded-full text-xs font-semibold">Thử lại</button>
+        </div>
+      } @else if (orders().length === 0) {
         <div class="text-center py-20 bg-white rounded-skincare border p-8 space-y-4 max-w-md mx-auto shadow-sm">
           <svg class="w-12 h-12 text-brand-fuchsia-light mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
           <h3 class="text-base font-semibold text-brand-charcoal">Không tìm thấy đơn hàng nào</h3>
@@ -42,250 +46,171 @@ import { OrderDTO, OrderStatus } from '../../../core/models/order.model';
           <a routerLink="/products" class="inline-block px-6 py-2 btn-fuchsia-glow rounded-full text-xs font-semibold">Mua Sắm Ngay</a>
         </div>
       } @else {
-        
-        <!-- Orders List -->
-        <div class="space-y-6">
-          @for (order of filteredOrders(); track order.id) {
+
+        <div class="space-y-5">
+          @for (order of orders(); track order.id) {
             <div class="bg-white rounded-skincare border border-brand-fuchsia-light/10 shadow-sm p-5 space-y-4 transition-all hover:shadow-md animate-fade-in">
-              
-              <!-- Order Header info -->
+
               <div class="flex flex-wrap items-center justify-between border-b pb-3 gap-2">
                 <div class="flex items-center space-x-2 text-xs">
                   <span class="text-brand-muted">Mã đơn:</span>
                   <strong class="text-brand-charcoal font-mono">{{ order.orderNumber }}</strong>
                   <span class="text-[10px] text-brand-muted">({{ order.createdAt | date:'dd/MM/yyyy HH:mm' }})</span>
                 </div>
-                
-                <!-- Status Badge -->
                 <span class="text-[9px] font-extrabold uppercase px-2.5 py-0.5 rounded-full tracking-wider"
-                  [ngClass]="{
-                    'bg-amber-100 text-amber-700': order.status === 'PENDING',
-                    'bg-blue-100 text-blue-700': order.status === 'CONFIRMED',
-                    'bg-cyan-100 text-cyan-700': order.status === 'PREPARING',
-                    'bg-indigo-100 text-indigo-700': order.status === 'SHIPPING',
-                    'bg-emerald-100 text-emerald-700': order.status === 'DELIVERED',
-                    'bg-red-100 text-red-700': order.status === 'CANCELLED',
-                    'bg-purple-100 text-purple-700': order.status === 'RETURNED'
-                  }"
+                  [ngClass]="statusClass(order.status)"
                 >
                   {{ getStatusText(order.status) }}
                 </span>
               </div>
 
-              <!-- Item Preview (Displays first item) -->
-              @if (order.items && order.items.length > 0) {
-                <div class="flex items-center space-x-4 text-xs">
-                  <img [src]="order.items[0].primaryImageUrl || 'assets/placeholder.jpg'" class="w-14 h-14 object-cover rounded-lg border bg-brand-champagne shrink-0" />
-                  <div class="flex-1 min-w-0">
-                    <h4 class="font-semibold text-brand-charcoal truncate">{{ order.items[0].productName }}</h4>
-                    @if (order.items[0].variantName) {
-                      <p class="text-[10px] text-brand-muted mt-0.5">{{ order.items[0].variantName }}</p>
-                    }
-                    <p class="text-[10px] text-brand-muted mt-0.5">Số lượng: {{ order.items[0].quantity }} x {{ order.items[0].price | currency:'VND':'symbol':'1.0-0' }}</p>
-                  </div>
-                  @if (order.items.length > 1) {
-                    <span class="text-[10px] text-brand-muted bg-stone-100 px-2 py-1 rounded shrink-0">+{{ order.items.length - 1 }} sản phẩm khác</span>
-                  }
+              <div class="flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div class="space-y-1">
+                  <p class="text-brand-charcoal"><span class="text-brand-muted">Người nhận:</span> <strong>{{ order.shippingName }}</strong></p>
+                  <p class="text-brand-muted">{{ order.totalItems }} sản phẩm · Thanh toán: {{ order.paymentMethod }}</p>
                 </div>
-              }
-
-              <!-- Footer total price & CTA actions -->
-              <div class="flex flex-wrap items-center justify-between border-t pt-3 gap-3">
-                <div class="text-xs">
-                  <span class="text-brand-muted">Tổng cộng (gồm ship):</span>
+                <div class="text-right">
+                  <span class="text-brand-muted">Tổng cộng:</span>
                   <strong class="text-brand-fuchsia-dark text-sm sm:text-base font-bold ml-1">{{ order.totalAmount | currency:'VND':'symbol':'1.0-0' }}</strong>
                 </div>
+              </div>
 
-                <div class="flex items-center space-x-2 text-xs font-semibold">
-                  @if (order.status === 'PENDING') {
-                    <button 
-                      (click)="triggerCancel(order.orderNumber)"
-                      class="px-4 py-2 border border-red-200 text-red-500 hover:bg-red-50 rounded-full transition-all"
-                    >
-                      Hủy Đơn Hàng
-                    </button>
-                  }
-                  <a 
-                    [routerLink]="['/orders', order.orderNumber]"
-                    class="px-4 py-2 btn-fuchsia-glow rounded-full text-center"
+              <div class="flex flex-wrap items-center justify-end gap-2 border-t pt-3 text-xs font-semibold">
+                @if (order.status === 'PENDING' || order.status === 'CONFIRMED') {
+                  <button
+                    (click)="triggerCancel(order.orderNumber)"
+                    class="px-4 py-2 border border-red-200 text-red-500 hover:bg-red-50 rounded-full transition-all"
                   >
-                    Xem Chi Tiết
-                  </a>
-                </div>
+                    Hủy Đơn Hàng
+                  </button>
+                }
+                <a [routerLink]="['/orders', order.orderNumber]" class="px-4 py-2 btn-fuchsia-glow rounded-full text-center">
+                  Xem Chi Tiết
+                </a>
               </div>
 
             </div>
           }
         </div>
 
-      }
+        @if (hasNext()) {
+          <div class="text-center mt-6">
+            <button (click)="loadMore()" [disabled]="isLoadingMore()"
+              class="px-6 py-2.5 border border-brand-fuchsia text-brand-fuchsia rounded-full text-xs font-semibold hover:bg-brand-rosewater transition-all disabled:opacity-50">
+              {{ isLoadingMore() ? 'Đang tải...' : 'Xem thêm đơn hàng' }}
+            </button>
+          </div>
+        }
 
+      }
     </div>
   `
 })
 export class HistoryComponent implements OnInit {
   private readonly orderService = inject(OrderService);
 
-  readonly orders = signal<OrderDTO[]>([]);
-  readonly filteredOrders = signal<OrderDTO[]>([]);
+  readonly orders = signal<OrderSummaryDTO[]>([]);
   readonly isLoading = signal(false);
+  readonly isLoadingMore = signal(false);
+  readonly errorMessage = signal('');
   readonly activeTab = signal<string>('ALL');
+  readonly hasNext = signal(false);
+
+  private currentPage = 0;
+  private readonly pageSize = 10;
 
   readonly statusTabs = [
     { name: 'Tất cả đơn', value: 'ALL' },
     { name: 'Chờ duyệt', value: 'PENDING' },
     { name: 'Đã xác nhận', value: 'CONFIRMED' },
+    { name: 'Đã thanh toán', value: 'PAID' },
     { name: 'Đóng gói', value: 'PREPARING' },
     { name: 'Đang giao', value: 'SHIPPING' },
     { name: 'Đã giao', value: 'DELIVERED' },
-    { name: 'Đã hủy', value: 'CANCELLED' }
-  ];
-
-  // Mock list for empty db or testing UI
-  private readonly mockOrders: OrderDTO[] = [
-    {
-      id: 1001,
-      orderNumber: 'ORD-20260520-7492',
-      userId: 1,
-      shippingName: 'Khánh Linh',
-      shippingPhone: '0987654321',
-      shippingProvince: 'Hồ Chí Minh',
-      shippingDistrict: 'Quận 1',
-      shippingWard: 'Bến Nghé',
-      shippingStreet: '15 Lê Lợi',
-      subtotal: 299000,
-      discountAmount: 0,
-      shippingFee: 30000,
-      pointsUsed: 0,
-      pointsAmount: 0,
-      totalAmount: 329000,
-      status: 'PENDING',
-      paymentMethod: 'COD',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      items: [
-        {
-          id: 111,
-          productId: 1,
-          productName: 'Tinh chất Trị Mụn BHA 2% Salicylic Acid Acne Clearing Serum',
-          productSlug: 'tinh-chat-tri-mun-bha-2-percent',
-          primaryImageUrl: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&q=80&w=200',
-          variantName: 'Dung tích 30ml',
-          quantity: 1,
-          price: 299000,
-          totalPrice: 299000
-        }
-      ],
-      statusHistory: []
-    },
-    {
-      id: 1002,
-      orderNumber: 'ORD-20260519-2150',
-      userId: 1,
-      shippingName: 'Khánh Linh',
-      shippingPhone: '0987654321',
-      shippingProvince: 'Hồ Chí Minh',
-      shippingDistrict: 'Quận 1',
-      shippingWard: 'Bến Nghé',
-      shippingStreet: '15 Lê Lợi',
-      subtotal: 505000,
-      discountAmount: 0,
-      shippingFee: 0,
-      pointsUsed: 0,
-      pointsAmount: 0,
-      totalAmount: 505000,
-      status: 'DELIVERED',
-      paymentMethod: 'VNPAY',
-      createdAt: '2026-05-19T14:30:00Z',
-      updatedAt: '2026-05-20T10:00:00Z',
-      items: [
-        {
-          id: 112,
-          productId: 2,
-          productName: 'Kem dưỡng Phục Hồi Làm Dịu Da Tổn Thương Panthenol B5 Cream',
-          productSlug: 'kem-duong-phuc-hoi-b5-cream',
-          primaryImageUrl: 'https://images.unsplash.com/photo-1608248597481-496100c80836?auto=format&fit=crop&q=80&w=200',
-          variantName: 'Tuýp 50ml',
-          quantity: 1,
-          price: 320000,
-          totalPrice: 320000
-        },
-        {
-          id: 113,
-          productId: 4,
-          productName: 'Sữa Rửa Mặt Tạo Bọt Dịu Nhẹ Trà Xanh Hydrating Green Tea Cleanser',
-          productSlug: 'sua-rua-mat-tao-bot-tra-xanh',
-          primaryImageUrl: 'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&q=80&w=200',
-          variantName: 'Chai 150ml',
-          quantity: 1,
-          price: 185000,
-          totalPrice: 185000
-        }
-      ],
-      statusHistory: []
-    }
+    { name: 'Đã hủy', value: 'CANCELLED' },
   ];
 
   ngOnInit(): void {
     this.loadOrders();
   }
 
-  loadOrders() {
+  loadOrders(): void {
+    this.currentPage = 0;
     this.isLoading.set(true);
-    this.orderService.getUserOrders().subscribe({
+    this.errorMessage.set('');
+    this.fetch(false);
+  }
+
+  loadMore(): void {
+    this.currentPage += 1;
+    this.isLoadingMore.set(true);
+    this.fetch(true);
+  }
+
+  private fetch(append: boolean): void {
+    const status = this.activeTab() === 'ALL' ? undefined : this.activeTab();
+    this.orderService.getUserOrders(status, this.currentPage, this.pageSize).subscribe({
       next: (res) => {
         this.isLoading.set(false);
-        if (res.success && res.data && res.data.content && res.data.content.length > 0) {
-          this.orders.set(res.data.content);
+        this.isLoadingMore.set(false);
+        if (res.success && res.data) {
+          const page = res.data;
+          this.orders.set(append ? [...this.orders(), ...page.content] : page.content);
+          this.hasNext.set(!page.last);
         } else {
-          this.orders.set(this.mockOrders);
+          this.errorMessage.set(res.message || 'Đã xảy ra lỗi.');
         }
-        this.filterOrdersList();
       },
-      error: () => {
+      error: (err) => {
         this.isLoading.set(false);
-        this.orders.set(this.mockOrders);
-        this.filterOrdersList();
-      }
+        this.isLoadingMore.set(false);
+        this.errorMessage.set(err.message || 'Không thể kết nối tới máy chủ.');
+      },
     });
   }
 
-  filterOrdersList() {
-    const tab = this.activeTab();
-    if (tab === 'ALL') {
-      this.filteredOrders.set(this.orders());
-    } else {
-      const filtered = this.orders().filter(o => o.status === tab);
-      this.filteredOrders.set(filtered);
-    }
-  }
-
-  selectTab(tabValue: string) {
+  selectTab(tabValue: string): void {
+    if (this.activeTab() === tabValue) return;
     this.activeTab.set(tabValue);
-    this.filterOrdersList();
+    this.loadOrders();
   }
 
   getStatusText(status: OrderStatus): string {
     const map: Record<OrderStatus, string> = {
       PENDING: 'Chờ duyệt',
       CONFIRMED: 'Đã xác nhận',
+      PAID: 'Đã thanh toán',
       PREPARING: 'Đóng gói',
       SHIPPING: 'Đang giao',
       DELIVERED: 'Đã giao thành công',
       CANCELLED: 'Đã hủy',
-      RETURNED: 'Đã trả hàng'
+      RETURN_REQUESTED: 'Yêu cầu trả hàng',
+      RETURNED: 'Đã trả hàng',
     };
     return map[status];
   }
 
-  triggerCancel(orderNumber: string) {
+  statusClass(status: OrderStatus): Record<string, boolean> {
+    return {
+      'bg-amber-100 text-amber-700': status === 'PENDING',
+      'bg-blue-100 text-blue-700': status === 'CONFIRMED',
+      'bg-teal-100 text-teal-700': status === 'PAID',
+      'bg-cyan-100 text-cyan-700': status === 'PREPARING',
+      'bg-indigo-100 text-indigo-700': status === 'SHIPPING',
+      'bg-emerald-100 text-emerald-700': status === 'DELIVERED',
+      'bg-red-100 text-red-700': status === 'CANCELLED',
+      'bg-orange-100 text-orange-700': status === 'RETURN_REQUESTED',
+      'bg-purple-100 text-purple-700': status === 'RETURNED',
+    };
+  }
+
+  triggerCancel(orderNumber: string): void {
     const reason = prompt('Nhập lý do bạn muốn hủy đơn hàng này:');
     if (reason === null) return;
     if (!reason.trim()) {
       alert('Vui lòng cung cấp lý do hủy đơn hàng!');
       return;
     }
-
     this.isLoading.set(true);
     this.orderService.cancelOrder(orderNumber, reason).subscribe({
       next: () => {
@@ -295,7 +220,7 @@ export class HistoryComponent implements OnInit {
       error: (err) => {
         this.isLoading.set(false);
         alert(err.message || 'Hủy đơn hàng thất bại. Đơn hàng có thể đã được giao.');
-      }
+      },
     });
   }
 }

@@ -126,3 +126,86 @@ export interface ProductFilterRequest {
   skinConcern?: string;
   sortBy?: 'name,asc' | 'price,asc' | 'price,desc' | 'soldCount,desc' | 'createdAt,desc';
 }
+
+export interface CategoryTreeDTO {
+  id: number;
+  name: string;
+  slug: string;
+  imageUrl?: string;
+  displayOrder?: number;
+  isActive?: boolean;
+  subCategories: CategoryTreeDTO[];
+}
+
+export type IngredientSafetyLevel = 'SAFE' | 'CAUTION' | 'AVOID';
+
+export interface IngredientSafetyDTO {
+  ingredientName: string;
+  status: IngredientSafetyLevel;
+  reason: string;
+}
+
+export interface IngredientConflictDTO {
+  ingredientA: string;
+  ingredientB: string;
+  severity: string;
+  reason: string;
+}
+
+export interface CheckIngredientSafetyRequest {
+  ingredientNames: string[];
+  skinType?: string;
+}
+
+export interface CheckIngredientConflictsRequest {
+  ingredientNames: string[];
+}
+
+export interface ProductStatsDTO {
+  totalProducts: number;
+  activeProducts: number;
+  outOfStockProducts: number;
+  productsByCategory: Record<string, number>;
+  productsByBrand: Record<string, number>;
+}
+
+export interface UpdateVariantRequest {
+  name?: string;
+  sku?: string;
+  price?: number;
+  salePrice?: number;
+  stockQuantity?: number;
+  isDefault?: boolean;
+  isActive?: boolean;
+}
+
+export interface CreateCategoryRequest {
+  name: string;
+  slug?: string;
+  description?: string;
+  imageUrl?: string;
+  parentId?: number;
+  displayOrder?: number;
+}
+
+export interface UpdateCategoryRequest extends Partial<CreateCategoryRequest> {}
+
+export interface CreateBrandRequest {
+  name: string;
+  slug?: string;
+  description?: string;
+  logoUrl?: string;
+  website?: string;
+}
+
+export interface UpdateBrandRequest extends Partial<CreateBrandRequest> {}
+
+export interface CreateIngredientRequest {
+  name: string;
+  slug?: string;
+  description?: string;
+  safetyRating?: number;
+  isKeyIngredient?: boolean;
+}
+
+export interface UpdateIngredientRequest extends Partial<CreateIngredientRequest> {}

@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Observable, catchError, map, throwError } from 'rxjs';
+import { environment } from '../../../environments/environment';
 
 export interface PageInfo {
   currentPage: number;
@@ -27,7 +28,7 @@ export interface ApiResponse<T> {
 })
 export class ApiService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = 'http://localhost:8080'; // API Gateway Base URL
+  private readonly baseUrl = environment.apiUrl;
 
   get<T>(url: string, params?: any): Observable<ApiResponse<T>> {
     let httpParams = new HttpParams();

@@ -6,11 +6,12 @@ import { AuthService } from '../../core/services/auth.service';
 import { CartService } from '../../core/services/cart.service';
 import { LanguageService } from '../../core/services/language.service';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { NotificationBellComponent } from '../../features/notifications/component/notification-bell.component';
 
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [CommonModule, RouterLink, RouterLinkActive, FormsModule, TranslatePipe],
+  imports: [CommonModule, RouterLink, RouterLinkActive, FormsModule, TranslatePipe, NotificationBellComponent],
   template: `
     <header class="sticky top-0 z-50 glass-header shadow-sm transition-all duration-300">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -133,6 +134,9 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
                 </div>
               }
             </div>
+
+            <!-- Notification Bell -->
+            <app-notification-bell></app-notification-bell>
 
             <!-- Profile / Account Icon -->
             <div class="relative">
