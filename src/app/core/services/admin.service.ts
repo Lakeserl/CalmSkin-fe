@@ -43,6 +43,21 @@ import {
   AssignBulkRequest,
   GenerateVoucherCodesRequest,
 } from '../models/promotion.model';
+import {
+  ReviewDTO,
+  ReviewReportDTO,
+  ReviewStatus,
+  ReportStatus,
+  AdminReviewStatsDTO,
+  AdminUpdateReviewRequest,
+  AdminUpdateReportRequest,
+} from '../models/review.model';
+import {
+  ShipmentDTO,
+  ShipmentStatus,
+  UpdateShipmentStatusRequest,
+  CancelShipmentRequest,
+} from '../models/shipment.model';
 import { SpringPage } from './order.service';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -422,5 +437,95 @@ export class AdminService {
     return this.api.get<FlashSaleSlotsDTO[]>(
       `/api/v1/admin/promotions/flash-sales/${flashSaleId}/slots`,
     );
+  }
+
+  // ─── Reviews moderation ─────────────────────────────────────────────────
+
+  /** GET /api/v1/admin/reviews — paginated list with optional status/productId filter. */
+  listReviewsAdmin(
+    params: { status?: ReviewStatus; productId?: number; page?: number; size?: number } = {},
+  ): Observable<ApiResponse<SpringPage<ReviewDTO>>> {
+    return this.api.get<SpringPage<ReviewDTO>>('/api/v1/admin/reviews', {
+      status: params.status,
+      productId: params.productId,
+      page: params.page ?? 0,
+      size: params.size ?? 20,
+    });
+  }
+
+  /** PATCH /api/v1/admin/reviews/{reviewId}/status */
+  updateReviewStatus(
+    reviewId: number,
+    body: AdminUpdateReviewRequest,
+  ): Observable<ApiResponse<ReviewDTO>> {
+    return this.api.patch<ReviewDTO>(`/api/v1/admin/reviews/${reviewId}/status`, body);
+  }
+
+  /** GET /api/v1/admin/reviews/stats */
+  getReviewStats(): Observable<ApiResponse<AdminReviewStatsDTO>> {
+    return this.api.get<AdminReviewStatsDTO>('/api/v1/admin/reviews/stats');
+  }
+
+  /** GET /api/v1/admin/reviews/reports */
+  listReviewReports(
+    params: { status?: ReportStatus; page?: number; size?: number } = {},
+  ): Observable<ApiResponse<SpringPage<ReviewReportDTO>>> {
+    return this.api.get<SpringPage<ReviewReportDTO>>('/api/v1/admin/reviews/reports', {
+      status: params.status ?? 'PENDING',
+      page: params.page ?? 0,
+      size: params.size ?? 20,
+    });
+  }
+
+  /** PATCH /api/v1/admin/reviews/reports/{reportId}/status */
+  resolveReviewReport(
+    reportId: number,
+    body: AdminUpdateReportRequest,
+  ): Observable<ApiResponse<ReviewReportDTO>> {
+    return this.api.patch<ReviewReportDTO>(
+      `/api/v1/admin/reviews/reports/${reportId}/status`,
+      body,
+    );
+  }
+
+  /** DELETE /api/v1/admin/reviews/replies/{replyId} */
+  deleteReviewReply(replyId: number): Observable<ApiResponse<void>> {
+    return this.api.delete<void>(`/api/v1/admin/reviews/replies/${replyId}`);
+  }
+
+  // ─── Shipments (admin) ───────────────────────────────────────────────────
+  // BE returns paginated data with page metadata on ApiResponse.page (not nested
+  // inside data). We rely on the existing PageInfo on ApiResponse for next-page.
+
+  /** GET /api/v1/admin/shipments — list shipments, optional status filter. */
+  listShipments(
+    params: { status?: ShipmentStatus; page?: number; size?: number } = {},
+  ): Observable<ApiResponse<ShipmentDTO[]>> {
+    return this.api.get<ShipmentDTO[]>('/api/v1/admin/shipments', {
+      status: params.status,
+      page: params.page ?? 0,
+      size: params.size ?? 20,
+    });
+  }
+
+  /** GET /api/v1/admin/shipments/{id} */
+  getShipment(id: number): Observable<ApiResponse<ShipmentDTO>> {
+    return this.api.get<ShipmentDTO>(`/api/v1/admin/shipments/${id}`);
+  }
+
+  /** PUT /api/v1/admin/shipments/{id}/status */
+  updateShipmentStatus(
+    id: number,
+    body: UpdateShipmentStatusRequest,
+  ): Observable<ApiResponse<ShipmentDTO>> {
+    return this.api.put<ShipmentDTO>(`/api/v1/admin/shipments/${id}/status`, body);
+  }
+
+  /** POST /api/v1/admin/shipments/{id}/cancel */
+  cancelShipment(
+    id: number,
+    body: CancelShipmentRequest,
+  ): Observable<ApiResponse<ShipmentDTO>> {
+    return this.api.post<ShipmentDTO>(`/api/v1/admin/shipments/${id}/cancel`, body);
   }
 }

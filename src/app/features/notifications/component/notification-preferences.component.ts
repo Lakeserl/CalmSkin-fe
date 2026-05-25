@@ -1,7 +1,9 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NotificationStore } from '../store/notification.store';
 import { UpdatePreferencesRequest } from '../model/notification.model';
+import { WebPushService } from '../service/web-push.service';
 
 @Component({
   selector: 'app-notification-preferences',
@@ -27,8 +29,11 @@ import { UpdatePreferencesRequest } from '../model/notification.model';
               </label>
               <label class="flex items-center justify-between cursor-pointer">
                 <span class="text-sm text-brand-charcoal">Web Push</span>
-                <input type="checkbox" [(ngModel)]="webPushEnabled" (change)="save()" class="w-4 h-4 accent-brand-fuchsia" />
+                <input type="checkbox" [(ngModel)]="webPushEnabled" (change)="onWebPushToggle()" class="w-4 h-4 accent-brand-fuchsia" />
               </label>
+              @if (pushError()) {
+                <p class="text-xs text-rose-500">{{ pushError() }}</p>
+              }
               <label class="flex items-center justify-between cursor-pointer">
                 <span class="text-sm text-brand-charcoal">Trong ứng dụng</span>
                 <input type="checkbox" [(ngModel)]="inAppEnabled" (change)="save()" class="w-4 h-4 accent-brand-fuchsia" />
@@ -111,7 +116,11 @@ import { UpdatePreferencesRequest } from '../model/notification.model';
 })
 export class NotificationPreferencesComponent implements OnInit {
   readonly store = inject(NotificationStore);
+  private readonly webPush = inject(WebPushService);
+  private readonly destroyRef = inject(DestroyRef);
+
   readonly saved = signal(false);
+  readonly pushError = signal('');
 
   emailEnabled = false;
   webPushEnabled = false;
@@ -139,6 +148,20 @@ export class NotificationPreferencesComponent implements OnInit {
     this.stockAlerts = p.stockAlerts;
     this.quietStart = p.quietHoursStart ?? '';
     this.quietEnd = p.quietHoursEnd ?? '';
+  }
+
+  onWebPushToggle(): void {
+    this.pushError.set('');
+    const want = this.webPushEnabled;
+    const action = want ? this.webPush.enable() : this.webPush.disable();
+    action.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: () => this.save(),
+      error: (err) => {
+        // Revert the toggle if the browser refused or unsupported.
+        this.webPushEnabled = !want;
+        this.pushError.set(err?.message || 'Không thể bật/tắt Web Push.');
+      },
+    });
   }
 
   save(): void {

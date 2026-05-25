@@ -1,14 +1,19 @@
-import { Component, inject, signal, OnInit, effect } from '@angular/core';
+import { Component, inject, signal, OnInit, effect, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { ProductService } from '../../../core/services/product.service';
 import { CartService } from '../../../core/services/cart.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { SubscriptionService } from '../../../core/services/subscription.service';
 import { ProductDTO, ProductSummaryDTO, ProductVariantDTO } from '../../../core/models/product.model';
+import { AddressDTO } from '../../../core/models/auth.model';
+import { ProductReviewsComponent } from '../../../features/reviews/component/product-reviews.component';
 
 @Component({
   selector: 'app-product-detail',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, FormsModule, ProductReviewsComponent],
   template: `
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
       
@@ -68,10 +73,11 @@ import { ProductDTO, ProductSummaryDTO, ProductVariantDTO } from '../../../core/
               <div class="flex items-center space-x-3 text-xs text-brand-muted">
                 <div class="flex items-center text-amber-400">
                   <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></svg>
-                  <span class="text-brand-charcoal font-semibold ml-1">{{ product()?.reviewSummary?.averageRating || 4.8 }}</span>
+                  <span class="text-brand-charcoal font-semibold ml-1">{{ (product()?.reviewSummary?.averageRating | number: '1.1-1') || '—' }}</span>
+                  <span class="text-brand-muted ml-1">({{ product()?.reviewSummary?.totalReviews ?? 0 }})</span>
                 </div>
                 <span>|</span>
-                <span>Đã bán: <strong class="text-brand-charcoal">{{ product()?.soldCount || 100 }}</strong> sản phẩm</span>
+                <span>Đã bán: <strong class="text-brand-charcoal">{{ product()?.soldCount ?? 0 }}</strong> sản phẩm</span>
               </div>
             </div>
 
@@ -141,6 +147,19 @@ import { ProductDTO, ProductSummaryDTO, ProductVariantDTO } from '../../../core/
               <button (click)="addToCart()" class="flex-1 py-3.5 btn-fuchsia-glow rounded-full text-xs font-bold transition-all">
                 Thêm Vào Giỏ Hàng
               </button>
+            </div>
+
+            <!-- Subscribe & Save Action -->
+            <div class="p-4 bg-brand-rosewater/25 border border-brand-fuchsia-light/10 rounded-skincare space-y-3 mt-4">
+              <div class="flex justify-between items-center">
+                <div>
+                  <p class="text-xs font-bold text-brand-charcoal">📅 Đăng ký giao định kỳ & Tiết kiệm</p>
+                  <p class="text-[10px] text-brand-muted">Giao hàng tự động mỗi 30-90 ngày. Dễ dàng tạm ngưng hay hủy.</p>
+                </div>
+                <button (click)="openSubModal()" class="px-4 py-2 bg-brand-fuchsia text-white hover:bg-brand-fuchsia-dark rounded-full font-bold text-[10px] transition-all shadow-sm">
+                  Đăng Ký Giao
+                </button>
+              </div>
             </div>
 
           </div>
@@ -223,6 +242,14 @@ import { ProductDTO, ProductSummaryDTO, ProductVariantDTO } from '../../../core/
           }
         </section>
 
+        <!-- Reviews Section -->
+        <div class="mb-12">
+          <app-product-reviews
+            [productId]="product()!.id"
+            [summary]="product()!.reviewSummary ?? null"
+          />
+        </div>
+
         <!-- Similar Products Section -->
         @if (similarProducts().length > 0) {
           <section class="space-y-6">
@@ -255,13 +282,83 @@ import { ProductDTO, ProductSummaryDTO, ProductVariantDTO } from '../../../core/
 
       }
 
-    </div>
+        <!-- SUBSCRIPTION DETAIL MODAL -->
+        @if (showSubModal()) {
+          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-fade-in text-brand-charcoal">
+            <div class="bg-white rounded-skincare p-6 max-w-md w-full border shadow-2xl space-y-4">
+              <h3 class="text-base font-serif font-bold text-brand-charcoal border-b pb-2 uppercase tracking-wide">
+                Đăng ký giao hàng định kỳ
+              </h3>
+              
+              <div class="flex items-center space-x-3 p-3 bg-brand-rosewater/20 rounded-xl">
+                <img [src]="activeImage()" class="w-12 h-12 object-cover rounded-lg border bg-brand-champagne" />
+                <div class="min-w-0">
+                  <p class="font-bold text-xs truncate">{{ product()?.name }}</p>
+                  <p class="text-[10px] text-brand-fuchsia font-semibold">{{ activePrice() | currency:'VND':'symbol':'1.0-0' }}</p>
+                </div>
+              </div>
+
+              <div class="space-y-4 text-xs font-semibold">
+                <!-- Frequency -->
+                <div class="space-y-1">
+                  <label class="text-[10px] text-brand-muted uppercase tracking-wider">Tần suất giao hàng</label>
+                  <select [(ngModel)]="selectedSubFrequency" class="w-full px-3 py-2 rounded-xl border border-brand-fuchsia-light bg-white font-medium focus:outline-none">
+                    <option [value]="30">Mỗi 30 ngày (Khuyên dùng)</option>
+                    <option [value]="45">Mỗi 45 ngày</option>
+                    <option [value]="60">Mỗi 60 ngày</option>
+                    <option [value]="90">Mỗi 90 ngày</option>
+                  </select>
+                </div>
+
+                <!-- Address -->
+                <div class="space-y-1">
+                  <div class="flex justify-between items-center">
+                    <label class="text-[10px] text-brand-muted uppercase tracking-wider">Địa chỉ giao hàng</label>
+                    <a routerLink="/profile" target="_blank" class="text-[9px] text-brand-fuchsia hover:underline">Thêm địa chỉ mới</a>
+                  </div>
+                  <select [(ngModel)]="selectedSubAddressId" class="w-full px-3 py-2 rounded-xl border border-brand-fuchsia-light bg-white font-medium focus:outline-none">
+                    <option value="">-- Chọn địa chỉ giao hàng --</option>
+                    @for (addr of userAddresses(); track addr.id) {
+                      <option [value]="addr.id">{{ addr.recipientName }} ({{ addr.phone }}) - {{ addr.street }}, {{ addr.ward }}</option>
+                    }
+                  </select>
+                  @if (userAddresses().length === 0) {
+                    <p class="text-red-500 text-[9px] mt-1">⚠️ Bạn cần thêm địa chỉ giao hàng trong trang cá nhân trước.</p>
+                  }
+                </div>
+
+                <div class="flex space-x-2 pt-2">
+                  <button (click)="confirmSubscription()" [disabled]="isSubscribing() || userAddresses().length === 0" 
+                    class="flex-1 py-3 bg-brand-fuchsia text-white rounded-full font-bold text-[11px] hover:bg-brand-fuchsia-dark transition-all disabled:opacity-50">
+                    {{ isSubscribing() ? 'Đang đăng ký...' : 'Xác Nhận Đăng Ký' }}
+                  </button>
+                  <button (click)="showSubModal.set(false)" class="px-5 py-3 border border-stone-200 text-brand-charcoal rounded-full font-bold text-[11px] hover:bg-stone-50 transition-all">
+                    Hủy
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        }
+
+      </div>
   `
 })
 export class DetailComponent implements OnInit {
   private readonly productService = inject(ProductService);
   private readonly cartService = inject(CartService);
   private readonly route = inject(ActivatedRoute);
+  private readonly authService = inject(AuthService);
+  private readonly subService = inject(SubscriptionService);
+
+  readonly isAuthenticated = computed(() => this.authService.isAuthenticated());
+  readonly showSubModal = signal(false);
+  readonly isSubscribing = signal(false);
+  readonly userAddresses = signal<AddressDTO[]>([]);
+
+  selectedSubAddressId = '';
+  selectedSubFrequency = 30;
 
   readonly product = signal<ProductDTO | null>(null);
   readonly similarProducts = signal<ProductSummaryDTO[]>([]);
@@ -274,122 +371,6 @@ export class DetailComponent implements OnInit {
 
   readonly activeTab = signal<'desc' | 'usage' | 'ingredients'>('desc');
 
-  // Full detailed mock database
-  private readonly mockDetailsMap: Record<string, ProductDTO> = {
-    'tinh-chat-tri-mun-bha-2-percent': {
-      id: 1,
-      name: 'Tinh chất Trị Mụn BHA 2% Salicylic Acid Acne Clearing Serum',
-      slug: 'tinh-chat-tri-mun-bha-2-percent',
-      sku: 'SKU-BHA-001',
-      description: 'Tinh chất trị mụn chuyên sâu BHA 2% chứa Salicylic Acid giúp len lỏi vào tận gốc phễu nang lông, phá vỡ bít tắc dầu thừa gây mụn đầu đen, mụn cám. Đồng thời bổ sung chiết xuất Rau má Centella làm mát dịu các vết mụn viêm sưng rát đỏ, hỗ trợ liền sẹo mụn nhanh chóng.',
-      shortDescription: 'Tinh chất gom cồi mụn, sạch bã nhờn bít tắc và ngăn ngừa mụn tái phát.',
-      howToUse: 'Dùng vào buổi tối, sau khi rửa mặt sạch và dùng toner cân bằng da. Thoa 3-4 giọt serum mỏng nhẹ lên toàn bộ da mặt hoặc chấm cục bộ tại đốm mụn sưng viêm. Vỗ nhẹ để tinh chất thẩm thấu triệt để.',
-      category: { id: 1, name: 'Serum', slug: 'serum' },
-      brand: { id: 1, name: 'CalmSKIN Lab', slug: 'calmskin-lab' },
-      basePrice: 350000,
-      salePrice: 299000,
-      discountPercent: 15,
-      suitableSkinTypes: ['Oily', 'Sensitive', 'Combination'],
-      skinConcerns: ['Mụn', 'Sẹo Thâm', 'Kiềm Dầu'],
-      viewCount: 4201,
-      soldCount: 1205,
-      createdAt: '2026-05-01T10:00:00Z',
-      updatedAt: '2026-05-20T00:00:00Z',
-      isFeatured: true,
-      isNewArrival: false,
-      status: 'ACTIVE',
-      tags: ['BHA', 'Trị Mụn', 'Kiềm Dầu'],
-      variants: [
-        { id: 11, sku: 'SKU-BHA-30ML', name: 'Dung tích 30ml', price: 299000, stock: 124, volumeMl: 30 },
-        { id: 12, sku: 'SKU-BHA-50ML', name: 'Dung tích 50ml (Tiết kiệm)', price: 420000, stock: 86, volumeMl: 50 }
-      ],
-      images: [
-        { id: 101, imageUrl: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&q=80&w=600', isPrimary: true, sortOrder: 1 },
-        { id: 102, imageUrl: 'https://images.unsplash.com/photo-1601049541289-9b1b7bbbfe19?auto=format&fit=crop&q=80&w=600', isPrimary: false, sortOrder: 2 },
-        { id: 103, imageUrl: 'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&q=80&w=600', isPrimary: false, sortOrder: 3 }
-      ],
-      keyIngredients: [
-        { id: 201, name: 'Salicylic Acid (BHA 2%)', slug: 'saliclyic-acid', description: 'Tẩy tế bào chết hóa học làm sạch phễu chân lông', safetyRating: 2, isKeyIngredient: true },
-        { id: 202, name: 'Centella Asiatica Extract', slug: 'centella-extract', description: 'Chiết xuất rau má làm dịu da viêm mẩn ngứa', safetyRating: 1, isKeyIngredient: true },
-        { id: 203, name: 'Niacinamide (Vitamin B3)', slug: 'niacinamide', description: 'Làm mờ hắc sắc tố, kháng viêm và củng cố biểu bì', safetyRating: 1, isKeyIngredient: false }
-      ]
-    },
-    'kem-duong-phuc-hoi-b5-cream': {
-      id: 2,
-      name: 'Kem dưỡng Phục Hồi Làm Dịu Da Tổn Thương Panthenol B5 Cream',
-      slug: 'kem-duong-phuc-hoi-b5-cream',
-      sku: 'SKU-B5-001',
-      description: 'Kem dưỡng phục hồi B5 bổ sung nồng độ cao Panthenol (Vitamin B5) kết hợp với Hyaluronic Acid đa tầng, tạo nên lớp màng gel dưỡng mỏng mịn bao bọc lấy các vùng da khô sần sùi, kích ứng rát đỏ. Kem không gây bết rít chân lông, cung cấp dưỡng chất cần thiết để biểu bì da tổn thương tự làm lành nhanh chóng.',
-      shortDescription: 'Phục hồi hàng rào bảo vệ da bị kích ứng, rát đỏ hoặc sau điều trị.',
-      howToUse: 'Thoa 1 lượng kem mỏng cỡ hạt đậu đều khắp da mặt vào buổi sáng và buổi tối. Có thể thoa dày hơn lên các vị trí da bị bong tróc khô rát cục bộ.',
-      category: { id: 2, name: 'Kem dưỡng', slug: 'kem-duong' },
-      brand: { id: 1, name: 'CalmSKIN Lab', slug: 'calmskin-lab' },
-      basePrice: 320000,
-      salePrice: 320000,
-      discountPercent: 0,
-      suitableSkinTypes: ['Oily', 'Dry', 'Sensitive', 'Combination'],
-      skinConcerns: ['Phục Hồi', 'Làm Dịu', 'Khô Ráp'],
-      viewCount: 3824,
-      soldCount: 2310,
-      createdAt: '2026-05-01T10:00:00Z',
-      updatedAt: '2026-05-20T00:00:00Z',
-      isFeatured: true,
-      isNewArrival: false,
-      status: 'ACTIVE',
-      tags: ['B5', 'Làm Dịu', 'Phục Hồi'],
-      variants: [
-        { id: 21, sku: 'SKU-B5-50ML', name: 'Tuýp 50ml', price: 320000, stock: 245, volumeMl: 50 }
-      ],
-      images: [
-        { id: 201, imageUrl: 'https://images.unsplash.com/photo-1608248597481-496100c80836?auto=format&fit=crop&q=80&w=600', isPrimary: true, sortOrder: 1 }
-      ],
-      keyIngredients: [
-        { id: 210, name: 'Panthenol (Vitamin B5 5%)', slug: 'panthenol', description: 'Tái tạo liên kết biểu bì, thúc đẩy lành thương vết da rách sần sùi', safetyRating: 1, isKeyIngredient: true },
-        { id: 211, name: 'Hyaluronic Acid (HA)', slug: 'ha', description: 'Cấp ẩm siêu phân tử ngậm nước gấp 1000 lần trọng lượng', safetyRating: 1, isKeyIngredient: true }
-      ]
-    }
-  };
-
-  private readonly mockSimilarCatalog: ProductSummaryDTO[] = [
-    {
-      id: 3,
-      name: 'Tinh chất Niacinamide 15% Dưỡng Sáng Mờ Thâm Sạm Brightening Booster',
-      slug: 'tinh-chat-niacinamide-15-percent-brightening',
-      shortDescription: 'Cải thiện sắc tố sạm đen, kiềm dầu thừa, se khít lỗ chân lông đáng kể.',
-      categoryName: 'Serum',
-      brandName: 'Luxe Derm',
-      price: 450000,
-      originalPrice: 500000,
-      discountPercent: 10,
-      primaryImageUrl: 'https://images.unsplash.com/photo-1601049541289-9b1b7bbbfe19?auto=format&fit=crop&q=80&w=400',
-      isNewArrival: false,
-      isFeatured: true,
-      status: 'ACTIVE',
-      tags: ['Niacinamide', 'Dưỡng Sáng', 'Mờ Thâm'],
-      averageRating: 4.7,
-      totalReviews: 45,
-      soldCount: 540
-    },
-    {
-      id: 4,
-      name: 'Sữa Rửa Mặt Tạo Bọt Dịu Nhẹ Trà Xanh Hydrating Green Tea Cleanser',
-      slug: 'sua-rua-mat-tao-bot-tra-xanh',
-      shortDescription: 'Làm sạch sâu bụi mịn không gây khô căng da mặt, kháng viêm vượt trội.',
-      categoryName: 'Sữa rửa mặt',
-      brandName: 'CalmSKIN Lab',
-      price: 185000,
-      originalPrice: 220000,
-      discountPercent: 16,
-      primaryImageUrl: 'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&q=80&w=400',
-      isNewArrival: false,
-      isFeatured: true,
-      status: 'ACTIVE',
-      tags: ['Trà Xanh', 'Làm Sạch', 'Dịu Nhẹ'],
-      averageRating: 4.8,
-      totalReviews: 215,
-      soldCount: 3980
-    }
-  ];
 
   constructor() {
     // Re-trigger load if slug query changes
@@ -415,19 +396,20 @@ export class DetailComponent implements OnInit {
         if (res.success && res.data) {
           this.setProductData(res.data);
         } else {
-          this.resolveMockDetails(slug);
+          this.product.set(null);
         }
       },
       error: () => {
-        this.resolveMockDetails(slug);
-      }
+        this.isLoading.set(false);
+        this.product.set(null);
+      },
     });
   }
 
   private setProductData(data: ProductDTO) {
     this.product.set(data);
     this.activeImage.set(data.images && data.images.length > 0 ? data.images[0].imageUrl : 'assets/placeholder.jpg');
-    
+
     if (data.variants && data.variants.length > 0) {
       this.selectVariant(data.variants[0]);
     } else {
@@ -435,20 +417,10 @@ export class DetailComponent implements OnInit {
       this.activePrice.set(data.salePrice || data.basePrice);
     }
 
-    // Fetch similar products
-    this.productService.getSimilarProducts(data.slug).subscribe(res => {
-      if (res.success && res.data && res.data.length > 0) {
-        this.similarProducts.set(res.data);
-      } else {
-        this.similarProducts.set(this.mockSimilarCatalog);
-      }
+    this.productService.getSimilarProducts(data.slug).subscribe({
+      next: (res) => this.similarProducts.set(res.data ?? []),
+      error: () => this.similarProducts.set([]),
     });
-  }
-
-  private resolveMockDetails(slug: string) {
-    this.isLoading.set(false);
-    const mock = this.mockDetailsMap[slug] || this.mockDetailsMap['tinh-chat-tri-mun-bha-2-percent'];
-    this.setProductData({ ...mock, slug });
   }
 
   selectVariant(variant: ProductVariantDTO) {
@@ -480,5 +452,53 @@ export class DetailComponent implements OnInit {
     });
 
     alert(`Đã thêm ${this.quantity()} sản phẩm vào giỏ hàng thành công!`);
+  }
+
+  openSubModal() {
+    if (!this.isAuthenticated()) {
+      alert('Vui lòng đăng nhập để đăng ký giao hàng định kỳ!');
+      return;
+    }
+    
+    this.authService.getUserAddresses().subscribe({
+      next: (res) => {
+        const addrs = res.data ?? [];
+        this.userAddresses.set(addrs);
+        const defAddr = addrs.find(a => a.isDefault) || addrs[0];
+        this.selectedSubAddressId = defAddr ? defAddr.id : '';
+        this.selectedSubFrequency = 30;
+        this.showSubModal.set(true);
+      },
+      error: () => {
+        alert('Không tải được danh sách địa chỉ. Vui lòng thử lại sau.');
+      }
+    });
+  }
+
+  confirmSubscription() {
+    const prod = this.product();
+    if (!prod) return;
+
+    if (!this.selectedSubAddressId) {
+      alert('Vui lòng chọn hoặc thêm địa chỉ giao hàng trong trang cá nhân!');
+      return;
+    }
+
+    this.isSubscribing.set(true);
+    this.subService.createSubscription({
+      productId: prod.id,
+      frequencyDays: Number(this.selectedSubFrequency),
+      addressId: this.selectedSubAddressId
+    }).subscribe({
+      next: () => {
+        this.isSubscribing.set(false);
+        this.showSubModal.set(false);
+        alert(`Đăng ký giao định kỳ sản phẩm ${prod.name} thành công! Bạn có thể quản lý tại Trang cá nhân > Đăng ký định kỳ.`);
+      },
+      error: (err) => {
+        this.isSubscribing.set(false);
+        alert(err.message || 'Đăng ký giao định kỳ thất bại.');
+      }
+    });
   }
 }

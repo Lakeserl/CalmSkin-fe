@@ -176,6 +176,11 @@ import { ProductSummaryDTO, CategoryDTO, BrandDTO, ProductFilterRequest } from '
                 <div class="bg-stone-50 rounded-skincare h-80 animate-pulse border"></div>
               }
             </div>
+          } @else if (errorMessage()) {
+            <div class="text-center py-16 bg-white rounded-skincare border p-8 space-y-3">
+              <p class="text-sm text-rose-500">{{ errorMessage() }}</p>
+              <button (click)="fetchProducts()" class="px-6 py-2 btn-fuchsia-glow rounded-full text-xs font-semibold">Thử lại</button>
+            </div>
           } @else if (products().length === 0) {
             <div class="text-center py-20 bg-white rounded-skincare border p-8 space-y-4">
               <svg class="w-12 h-12 text-brand-fuchsia-light mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -216,10 +221,16 @@ import { ProductSummaryDTO, CategoryDTO, BrandDTO, ProductFilterRequest } from '
                       <div class="flex items-center space-x-1 text-[10px] text-amber-400">
                         <div class="flex">
                           @for (star of [1,2,3,4,5]; track star) {
-                            <svg class="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></svg>
+                            <svg
+                              class="w-2.5 h-2.5"
+                              [class.fill-current]="star <= (product.averageRating ?? 0)"
+                              [class.text-stone-300]="star > (product.averageRating ?? 0)"
+                              [class.fill-stone-300]="star > (product.averageRating ?? 0)"
+                              viewBox="0 0 24 24"
+                            ><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></svg>
                           }
                         </div>
-                        <span class="text-brand-muted">({{ product.totalReviews || 10 }})</span>
+                        <span class="text-brand-muted">({{ product.totalReviews ?? 0 }})</span>
                       </div>
 
                       <div class="flex items-center justify-between pt-2 border-t border-stone-50 mt-2">
@@ -284,6 +295,7 @@ export class ListComponent implements OnInit {
   readonly categories = signal<CategoryDTO[]>([]);
   readonly brands = signal<BrandDTO[]>([]);
   readonly isLoading = signal(false);
+  readonly errorMessage = signal('');
 
   // Filters State
   readonly activeCategoryId = signal<number | null>(null);
@@ -309,123 +321,6 @@ export class ListComponent implements OnInit {
     { name: 'Da Hỗn Hợp', value: 'Combination' }
   ];
 
-  // Full mock catalog data
-  private readonly mockCatalog: ProductSummaryDTO[] = [
-    {
-      id: 1,
-      name: 'Tinh chất Trị Mụn BHA 2% Salicylic Acid Acne Clearing Serum',
-      slug: 'tinh-chat-tri-mun-bha-2-percent',
-      shortDescription: 'Tinh chất gom cồi mụn, sạch bã nhờn bít tắc và ngăn ngừa mụn tái phát.',
-      categoryName: 'Serum',
-      brandName: 'CalmSKIN Lab',
-      price: 299000,
-      originalPrice: 350000,
-      discountPercent: 15,
-      primaryImageUrl: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&q=80&w=400',
-      isNewArrival: false,
-      isFeatured: true,
-      status: 'ACTIVE',
-      tags: ['BHA', 'Trị Mụn', 'Kiềm Dầu'],
-      averageRating: 4.8,
-      totalReviews: 84,
-      soldCount: 1205
-    },
-    {
-      id: 2,
-      name: 'Kem dưỡng Phục Hồi Làm Dịu Da Tổn Thương Panthenol B5 Cream',
-      slug: 'kem-duong-phuc-hoi-b5-cream',
-      shortDescription: 'Kem phục hồi cấp ẩm và củng cố hàng rào bảo vệ cho làn da đang điều trị hoặc mẩn ngứa.',
-      categoryName: 'Kem dưỡng',
-      brandName: 'CalmSKIN Lab',
-      price: 320000,
-      originalPrice: 320000,
-      discountPercent: 0,
-      primaryImageUrl: 'https://images.unsplash.com/photo-1608248597481-496100c80836?auto=format&fit=crop&q=80&w=400',
-      isNewArrival: false,
-      isFeatured: true,
-      status: 'ACTIVE',
-      tags: ['B5', 'Làm Dịu', 'Phục Hồi'],
-      averageRating: 4.9,
-      totalReviews: 120,
-      soldCount: 2310
-    },
-    {
-      id: 3,
-      name: 'Tinh chất Niacinamide 15% Dưỡng Sáng Mờ Thâm Sạm Brightening Booster',
-      slug: 'tinh-chat-niacinamide-15-percent-brightening',
-      shortDescription: 'Tập trung se khít chân lông, mờ đốm thâm mụn sạm sẫm màu cực kỳ hiệu quả.',
-      categoryName: 'Serum',
-      brandName: 'Luxe Derm',
-      price: 450000,
-      originalPrice: 500000,
-      discountPercent: 10,
-      primaryImageUrl: 'https://images.unsplash.com/photo-1601049541289-9b1b7bbbfe19?auto=format&fit=crop&q=80&w=400',
-      isNewArrival: false,
-      isFeatured: true,
-      status: 'ACTIVE',
-      tags: ['Niacinamide', 'Dưỡng Sáng', 'Mờ Thâm'],
-      averageRating: 4.7,
-      totalReviews: 45,
-      soldCount: 540
-    },
-    {
-      id: 4,
-      name: 'Sữa Rửa Mặt Tạo Bọt Dịu Nhẹ Trà Xanh Hydrating Green Tea Cleanser',
-      slug: 'sua-rua-mat-tao-bot-tra-xanh',
-      shortDescription: 'Rửa sạch cặn bẩn bã nhờn, nuôi dưỡng cấp ẩm, không làm khô rát da mặt.',
-      categoryName: 'Sữa rửa mặt',
-      brandName: 'CalmSKIN Lab',
-      price: 185000,
-      originalPrice: 220000,
-      discountPercent: 16,
-      primaryImageUrl: 'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?auto=format&fit=crop&q=80&w=400',
-      isNewArrival: false,
-      isFeatured: true,
-      status: 'ACTIVE',
-      tags: ['Trà Xanh', 'Làm Sạch', 'Dịu Nhẹ'],
-      averageRating: 4.8,
-      totalReviews: 215,
-      soldCount: 3980
-    },
-    {
-      id: 5,
-      name: 'Kem Chống Nắng Phổ Rộng Hàng Ngày Daily UV Shield Sunscreen SPF50+',
-      slug: 'kem-chong-nang-pho-rong-shield-spf50',
-      shortDescription: 'Chống nắng quang phổ rộng vượt trội, ngăn ngừa lão hóa UV tối ưu.',
-      categoryName: 'Kem chống nắng',
-      brandName: 'CalmSKIN Lab',
-      price: 360000,
-      originalPrice: 360000,
-      discountPercent: 0,
-      primaryImageUrl: 'https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?auto=format&fit=crop&q=80&w=400',
-      isNewArrival: true,
-      isFeatured: false,
-      status: 'ACTIVE',
-      tags: ['Chống Nắng', 'Quang Phổ Rộng'],
-      averageRating: 5.0,
-      totalReviews: 3,
-      soldCount: 42
-    },
-    {
-      id: 6,
-      name: 'Tinh chất Tái Tạo Trẻ Hóa Da Đêm Retinol Liposome 0.5%',
-      slug: 'retinol-liposome-0-5-percent',
-      shortDescription: 'Làm phẳng rãnh nhăn, tăng độ căng bóng tươi trẻ cho bề mặt tế bào da.',
-      categoryName: 'Serum',
-      brandName: 'Luxe Derm',
-      price: 520000,
-      originalPrice: 600000,
-      discountPercent: 13,
-      primaryImageUrl: 'https://images.unsplash.com/photo-1571781926291-c477ebfd024b?auto=format&fit=crop&q=80&w=400',
-      isNewArrival: true,
-      isFeatured: false,
-      status: 'ACTIVE',
-      tags: ['Retinol', 'Trẻ Hóa', 'Chống Lão Hóa'],
-      averageRating: 4.8,
-      totalReviews: 6,
-      soldCount: 88
-    }
-  ];
 
   constructor() {
     // Listen to query parameters reactively to reload products
@@ -448,28 +343,25 @@ export class ListComponent implements OnInit {
 
   ngOnInit(): void {
     // Fetch filter catalogs (Categories & Brands)
-    this.productService.getCategories().subscribe(res => {
-      if (res.success && res.data) this.categories.set(res.data);
-      else this.categories.set([
-        { id: 1, name: 'Serum', slug: 'serum' },
-        { id: 2, name: 'Kem dưỡng', slug: 'kem-duong' },
-        { id: 3, name: 'Sữa rửa mặt', slug: 'sua-rua-mat' },
-        { id: 4, name: 'Kem chống nắng', slug: 'kem-chong-nang' }
-      ]);
+    this.productService.getCategories().subscribe({
+      next: (res) => {
+        if (res.success && res.data) this.categories.set(res.data);
+      },
+      error: () => this.categories.set([]),
     });
 
-    this.productService.getBrands().subscribe(res => {
-      if (res.success && res.data) this.brands.set(res.data);
-      else this.brands.set([
-        { id: 1, name: 'CalmSKIN Lab', slug: 'calmskin-lab' },
-        { id: 2, name: 'Luxe Derm', slug: 'luxe-derm' }
-      ]);
+    this.productService.getBrands().subscribe({
+      next: (res) => {
+        if (res.success && res.data) this.brands.set(res.data);
+      },
+      error: () => this.brands.set([]),
     });
   }
 
   fetchProducts() {
     this.isLoading.set(true);
-    
+    this.errorMessage.set('');
+
     const filter: ProductFilterRequest = {
       query: this.tempQuery || undefined,
       categoryId: this.activeCategoryId() || undefined,
@@ -484,70 +376,24 @@ export class ListComponent implements OnInit {
     this.productService.searchProducts(filter, this.currentPage(), 9).subscribe({
       next: (res) => {
         this.isLoading.set(false);
-        if (res.success && res.data && res.data.content && res.data.content.length > 0) {
-          this.products.set(res.data.content);
-          this.totalPages.set(res.data.totalPages);
+        if (res.success && res.data) {
+          this.products.set(res.data.content ?? []);
+          this.totalPages.set(res.data.totalPages ?? 1);
         } else {
-          this.filterMockData();
+          this.products.set([]);
+          this.totalPages.set(1);
+          this.errorMessage.set(res.message || 'Không thể tải danh sách sản phẩm.');
         }
       },
-      error: () => {
-        this.filterMockData();
-      }
+      error: (err) => {
+        this.isLoading.set(false);
+        this.products.set([]);
+        this.totalPages.set(1);
+        this.errorMessage.set(err?.message || 'Không thể tải danh sách sản phẩm.');
+      },
     });
   }
 
-  private filterMockData() {
-    this.isLoading.set(false);
-    let list = [...this.mockCatalog];
-
-    // Filter by name query
-    if (this.tempQuery) {
-      list = list.filter(p => p.name.toLowerCase().includes(this.tempQuery.toLowerCase()));
-    }
-    // Filter by Category
-    if (this.activeCategoryId()) {
-      const catName = this.activeCategoryId() === 1 ? 'Serum' : this.activeCategoryId() === 2 ? 'Kem dưỡng' : this.activeCategoryId() === 3 ? 'Sữa rửa mặt' : 'Kem chống nắng';
-      list = list.filter(p => p.categoryName === catName);
-    }
-    // Filter by Brand
-    if (this.activeBrandId()) {
-      const bName = this.activeBrandId() === 1 ? 'CalmSKIN Lab' : 'Luxe Derm';
-      list = list.filter(p => p.brandName === bName);
-    }
-    // Filter by Skin Concern
-    if (this.activeSkinConcern()) {
-      list = list.filter(p => p.tags.includes(this.activeSkinConcern()!));
-    }
-    // Filter by Skin Type
-    if (this.activeSkinType()) {
-      // Mock tagging
-      if (this.activeSkinType() === 'Oily') {
-        list = list.filter(p => p.tags.includes('Kiềm Dầu') || p.tags.includes('BHA'));
-      }
-    }
-    // Filter by Price range
-    if (this.minPrice) {
-      list = list.filter(p => p.price >= this.minPrice!);
-    }
-    if (this.maxPrice) {
-      list = list.filter(p => p.price <= this.maxPrice!);
-    }
-
-    // Sort
-    if (this.activeSort === 'price,asc') {
-      list.sort((a,b) => a.price - b.price);
-    } else if (this.activeSort === 'price,desc') {
-      list.sort((a,b) => b.price - a.price);
-    } else if (this.activeSort === 'name,asc') {
-      list.sort((a,b) => a.name.localeCompare(b.name));
-    } else {
-      list.sort((a,b) => b.soldCount - a.soldCount);
-    }
-
-    this.products.set(list);
-    this.totalPages.set(Math.ceil(list.length / 9));
-  }
 
   updateUrl(params: any) {
     this.router.navigate([], {

@@ -179,62 +179,14 @@ export class AdminInventoryComponent implements OnInit {
   readonly inventories = signal<InventoryDTO[]>([]);
   readonly movements = signal<StockMovementDTO[]>([]);
   readonly isLoading = signal(false);
+  readonly errorMessage = signal('');
 
   // Form states
   importInventoryId = 0;
   importQuantity = 10;
   importNote = '';
 
-  // Mock list matching Spring Boot lowStockThreshold
-  private readonly mockInventories: InventoryDTO[] = [
-    {
-      id: 1,
-      productId: 1,
-      variantId: 11,
-      productName: 'Tinh chất Trị Mụn BHA 2% Salicylic Acid Acne Clearing Serum (30ml)',
-      quantityAvailable: 4,
-      quantityReserved: 2,
-      quantitySold: 120,
-      lowStockThreshold: 10,
-      warehouseLocation: 'SHELF-A1',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: 2,
-      productId: 2,
-      variantId: 21,
-      productName: 'Kem dưỡng Phục Hồi Làm Dịu Da Tổn Thương Panthenol B5 Cream (50ml)',
-      quantityAvailable: 245,
-      quantityReserved: 10,
-      quantitySold: 580,
-      lowStockThreshold: 15,
-      warehouseLocation: 'SHELF-B3',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-  ];
 
-  private readonly mockMovements: StockMovementDTO[] = [
-    {
-      id: 881,
-      inventoryId: 1,
-      quantity: 100,
-      movementType: 'IN',
-      note: 'Nhập lô hàng BHA mới về kho đợt đầu tháng 5',
-      referenceId: 'PO-2026-001',
-      createdAt: '2026-05-01T09:00:00Z'
-    },
-    {
-      id: 882,
-      inventoryId: 1,
-      quantity: 1,
-      movementType: 'RESERVE',
-      note: 'Khách hàng đặt giữ kho tạm thời cho mã đơn hàng ORD-7492',
-      referenceId: 'ORD-7492',
-      createdAt: new Date().toISOString()
-    }
-  ];
 
   ngOnInit(): void {
     this.loadInventoryData();
@@ -242,37 +194,37 @@ export class AdminInventoryComponent implements OnInit {
 
   loadInventoryData() {
     this.isLoading.set(true);
+    this.errorMessage.set('');
 
-    // Fetch actual stock levels from adminService
     this.adminService.getInventory(0, 100).subscribe({
       next: (res) => {
-        if (res.success && res.data && res.data.content && res.data.content.length > 0) {
-          this.inventories.set(res.data.content);
-        } else {
-          this.inventories.set(this.mockInventories);
+        const list = res.data?.content ?? [];
+        this.inventories.set(list);
+
+        const firstId = list[0]?.id;
+        if (!firstId) {
+          this.movements.set([]);
+          this.isLoading.set(false);
+          return;
         }
 
-        // Fetch movements for ID 1 (mock/or resolved)
-        this.adminService.getInventoryMovements(1).subscribe({
+        this.adminService.getInventoryMovements(firstId).subscribe({
           next: (movRes) => {
             this.isLoading.set(false);
-            if (movRes.success && movRes.data && movRes.data.content) {
-              this.movements.set(movRes.data.content);
-            } else {
-              this.movements.set(this.mockMovements);
-            }
+            this.movements.set(movRes.data?.content ?? []);
           },
           error: () => {
             this.isLoading.set(false);
-            this.movements.set(this.mockMovements);
-          }
+            this.movements.set([]);
+          },
         });
       },
-      error: () => {
+      error: (err) => {
         this.isLoading.set(false);
-        this.inventories.set(this.mockInventories);
-        this.movements.set(this.mockMovements);
-      }
+        this.inventories.set([]);
+        this.movements.set([]);
+        this.errorMessage.set(err?.message || 'Không thể tải dữ liệu kho.');
+      },
     });
   }
 
@@ -297,17 +249,10 @@ export class AdminInventoryComponent implements OnInit {
         alert('Cập nhật ngưỡng an toàn thành công!');
         this.loadInventoryData();
       },
-      error: () => {
-        const list = this.inventories().map(i => {
-          if (i.id === inv.id) {
-            return { ...i, lowStockThreshold: threshold };
-          }
-          return i;
-        });
-        this.inventories.set(list);
+      error: (err) => {
         this.isLoading.set(false);
-        alert('Cập nhật ngưỡng an toàn giả lập thành công!');
-      }
+        alert(err?.message || 'Cập nhật ngưỡng an toàn thất bại.');
+      },
     });
   }
 
@@ -323,31 +268,10 @@ export class AdminInventoryComponent implements OnInit {
         this.clearImportForm();
         this.loadInventoryData();
       },
-      error: () => {
-        // Mock add import
-        const list = this.inventories().map(i => {
-          if (i.id === +this.importInventoryId) {
-            return { ...i, quantityAvailable: i.quantityAvailable + this.importQuantity };
-          }
-          return i;
-        });
-        this.inventories.set(list);
-        
-        const newMov: StockMovementDTO = {
-          id: Math.floor(Math.random() * 1000),
-          inventoryId: this.importInventoryId,
-          quantity: this.importQuantity,
-          movementType: 'IN',
-          note: this.importNote || 'Nhập hàng bổ sung giả lập',
-          referenceId: 'PO-MOCK-NEW',
-          createdAt: new Date().toISOString()
-        };
-        this.movements.set([newMov, ...this.movements()]);
-        
-        this.clearImportForm();
+      error: (err) => {
         this.isLoading.set(false);
-        alert('Nhập hàng mới giả lập thành công!');
-      }
+        alert(err?.message || 'Nhập hàng thất bại.');
+      },
     });
   }
 

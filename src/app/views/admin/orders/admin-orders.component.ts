@@ -12,9 +12,18 @@ import { OrderStatus, OrderSummaryDTO } from '../../../core/models/order.model';
   template: `
     <div class="space-y-8 animate-fade-in text-slate-100">
 
-      <div class="border-b border-slate-800 pb-5">
-        <h1 class="text-3xl font-serif font-bold text-white">Quản Lý Đơn Hàng</h1>
-        <p class="text-xs text-slate-400 mt-1">Phê duyệt trạng thái thanh toán, đóng gói vận chuyển và xử lý hoàn trả CalmSKIN.</p>
+      <div class="flex items-start justify-between border-b border-slate-800 pb-5">
+        <div>
+          <h1 class="text-3xl font-serif font-bold text-white">Quản Lý Đơn Hàng</h1>
+          <p class="text-xs text-slate-400 mt-1">Phê duyệt trạng thái thanh toán, đóng gói vận chuyển và xử lý hoàn trả CalmSKIN.</p>
+        </div>
+        <button
+          (click)="exportCsv()"
+          [disabled]="isExporting()"
+          class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-full disabled:opacity-50"
+        >
+          {{ isExporting() ? 'Đang xuất...' : 'Xuất CSV' }}
+        </button>
       </div>
 
       <!-- Filters -->
@@ -126,6 +135,7 @@ export class AdminOrdersComponent implements OnInit {
   readonly errorMessage = signal('');
   readonly activeStatus = signal<string>('ALL');
   readonly hasNext = signal(false);
+  readonly isExporting = signal(false);
 
   private currentPage = 0;
   private readonly pageSize = 15;
@@ -249,6 +259,28 @@ export class AdminOrdersComponent implements OnInit {
       error: (err) => {
         this.isLoading.set(false);
         alert(err.message || 'Hủy đơn hàng thất bại.');
+      },
+    });
+  }
+
+  exportCsv(): void {
+    const status = this.activeStatus() === 'ALL' ? undefined : (this.activeStatus() as OrderStatus);
+    this.isExporting.set(true);
+    this.adminService.exportOrdersCsv({ status }).subscribe({
+      next: (blob) => {
+        this.isExporting.set(false);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `orders-${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      },
+      error: (err) => {
+        this.isExporting.set(false);
+        alert(err?.message || 'Xuất CSV thất bại.');
       },
     });
   }

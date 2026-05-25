@@ -81,4 +81,9 @@ export class ProductService {
   checkIngredientConflicts(ingredientIds: number[]): Observable<ApiResponse<IngredientConflictDTO[]>> {
     return this.api.post<IngredientConflictDTO[]>('/api/v1/ingredients/check-conflicts', { ingredientIds });
   }
+
+  /** GET /api/v1/products/compare?ids=1,2,3 — side-by-side compare 2-4 products. */
+  compareProducts(ids: number[]): Observable<ApiResponse<ProductDTO[]>> {
+    return this.api.get<ProductDTO[]>('/api/v1/products/compare', { ids: ids.join(',') });
+  }
 }

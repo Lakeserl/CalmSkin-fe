@@ -93,6 +93,24 @@ export const routes: Routes = [
         canActivate: [authGuard]
       },
       {
+        path: 'profile/reviews',
+        loadComponent: () => import('./views/profile/reviews/my-reviews.component').then(m => m.MyReviewsComponent),
+        canActivate: [authGuard]
+      },
+      {
+        path: 'profile/subscriptions',
+        loadComponent: () => import('./views/profile/subscriptions/subscriptions.component').then(m => m.SubscriptionsComponent),
+        canActivate: [authGuard]
+      },
+      {
+        path: 'routine',
+        loadComponent: () => import('./views/routine/routine.component').then(m => m.RoutineComponent)
+      },
+      {
+        path: 'products/compare',
+        loadComponent: () => import('./views/product/compare/compare.component').then(m => m.CompareComponent)
+      },
+      {
         path: 'notifications',
         children: notificationRoutes
       }
@@ -137,6 +155,14 @@ export const routes: Routes = [
       {
         path: 'promotions',
         loadComponent: () => import('./views/admin/promotions/admin-promotions.component').then(m => m.AdminPromotionsComponent)
+      },
+      {
+        path: 'reviews',
+        loadComponent: () => import('./views/admin/reviews/admin-reviews.component').then(m => m.AdminReviewsComponent)
+      },
+      {
+        path: 'shipments',
+        loadComponent: () => import('./views/admin/shipments/admin-shipments.component').then(m => m.AdminShipmentsComponent)
       },
       {
         path: 'notifications',

@@ -78,6 +78,15 @@ import { UserDTO, AddressDTO, LoyaltyTransactionDTO } from '../../core/models/au
               <a routerLink="/profile/skin" class="block py-1 hover:text-brand-fuchsia">
                 {{ lang.currentLang() === 'vi' ? 'Hồ sơ da' : 'Skin profile' }}
               </a>
+              <a routerLink="/profile/reviews" class="block py-1 hover:text-brand-fuchsia">
+                {{ lang.currentLang() === 'vi' ? 'Đánh giá của tôi' : 'My reviews' }}
+              </a>
+              <a routerLink="/routine" class="block py-1 hover:text-brand-fuchsia">
+                {{ lang.currentLang() === 'vi' ? 'Liệu trình của tôi' : 'My routine' }}
+              </a>
+              <a routerLink="/profile/subscriptions" class="block py-1 hover:text-brand-fuchsia">
+                {{ lang.currentLang() === 'vi' ? 'Đăng ký định kỳ' : 'My subscriptions' }}
+              </a>
               <a routerLink="/profile/sessions" class="block py-1 hover:text-brand-fuchsia">
                 {{ lang.currentLang() === 'vi' ? 'Phiên đăng nhập' : 'Sessions' }}
               </a>

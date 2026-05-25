@@ -43,9 +43,20 @@ export interface IngredientDTO {
   isKeyIngredient: boolean;
 }
 
+/**
+ * Denormalized rating summary embedded on ProductDTO by product-service ProductMapper.
+ * Use this directly instead of an N+1 call to review-service `/summary` per card.
+ */
 export interface ReviewSummaryDTO {
+  id?: number;
   averageRating: number;
   totalReviews: number;
+  fiveStarCount?: number;
+  fourStarCount?: number;
+  threeStarCount?: number;
+  twoStarCount?: number;
+  oneStarCount?: number;
+  updatedAt?: string;
 }
 
 export interface ProductDTO {

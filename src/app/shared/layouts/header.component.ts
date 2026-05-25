@@ -40,6 +40,14 @@ import { NotificationBellComponent } from '../../features/notifications/componen
             <a routerLink="/products" [queryParams]="{ categoryId: 1 }" class="text-brand-charcoal hover:text-brand-fuchsia transition-colors duration-200 py-2">
               {{ 'footer.colShopSerum' | translate }}
             </a>
+            <a routerLink="/flash-sales" class="text-rose-500 font-bold hover:text-brand-fuchsia transition-colors duration-200 py-2 flex items-center space-x-1">
+              <span>⚡</span>
+              <span>Flash Sale</span>
+            </a>
+            <a routerLink="/routine" class="text-emerald-600 font-bold hover:text-brand-fuchsia transition-colors duration-200 py-2 flex items-center space-x-1">
+              <span>✨</span>
+              <span>Liệu trình</span>
+            </a>
           </nav>
 
           <!-- Search Bar & Icons -->

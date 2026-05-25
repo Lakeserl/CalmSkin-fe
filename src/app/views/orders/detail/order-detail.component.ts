@@ -3,7 +3,9 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { OrderService } from '../../../core/services/order.service';
 import { PaymentService } from '../../../core/services/payment.service';
+import { ShipmentService } from '../../../core/services/shipment.service';
 import { OrderDTO, OrderStatus } from '../../../core/models/order.model';
+import { ShipmentDTO } from '../../../core/models/shipment.model';
 
 interface TimelineStep {
   label: string;
@@ -94,10 +96,55 @@ interface TimelineStep {
           }
 
           @if (order()?.cancelReason) {
-            <div class="bg-red-50 border border-red-100 rounded-skincare p-4 text-xs text-red-700">
-              <strong>Lý do hủy/hoàn:</strong> {{ order()?.cancelReason }}
-            </div>
-          }
+             <div class="bg-red-50 border border-red-100 rounded-skincare p-4 text-xs text-red-700">
+               <strong>Lý do hủy/hoàn:</strong> {{ order()?.cancelReason }}
+             </div>
+           }
+
+           <!-- SHIPMENT CARRIER TRACKING EVENTS -->
+           @if (shipment(); as ship) {
+             <div class="bg-white p-6 rounded-skincare border border-brand-fuchsia-light/10 shadow-sm space-y-4">
+               <div class="flex justify-between items-center border-b pb-3">
+                 <h3 class="font-bold text-brand-charcoal uppercase tracking-wider text-[10px] flex items-center">
+                   🚚 Chi Tiết Vận Chuyển ({{ ship.provider }})
+                 </h3>
+                 @if (ship.trackingNumber) {
+                   <span class="text-xs font-mono bg-stone-50 border px-2.5 py-1 rounded text-brand-charcoal">
+                     Mã vận đơn: <strong>{{ ship.trackingNumber }}</strong>
+                   </span>
+                 }
+               </div>
+
+               @if (ship.trackingEvents && ship.trackingEvents.length > 0) {
+                 <!-- Vertical Timeline of Tracking Events -->
+                 <div class="relative pl-6 border-l-2 border-brand-fuchsia/20 space-y-6 text-xs ml-2 py-1">
+                   @for (event of ship.trackingEvents; track $index; let first = $first) {
+                     <div class="relative">
+                       <!-- Small dot on line -->
+                       <div class="absolute -left-[31px] top-1.5 w-2.5 h-2.5 rounded-full border border-white transition-all shadow"
+                         [ngClass]="first ? 'bg-brand-fuchsia scale-125 ring-4 ring-brand-fuchsia/20' : 'bg-brand-muted'"
+                       ></div>
+                       
+                       <div class="space-y-1">
+                         <div class="flex items-center space-x-2">
+                           <span class="font-bold text-brand-charcoal">{{ getShipmentStatusText(event.status) }}</span>
+                           @if (event.location) {
+                             <span class="text-[10px] bg-stone-100 text-brand-muted px-1.5 py-0.5 rounded font-medium">{{ event.location }}</span>
+                           }
+                         </div>
+                         @if (event.description) {
+                           <p class="text-brand-muted font-medium leading-relaxed">{{ event.description }}</p>
+                         }
+                         <p class="text-[9px] text-brand-muted/70">{{ event.occurredAt | date:'dd/MM/yyyy HH:mm' }}</p>
+                       </div>
+                     </div>
+                   }
+                 </div>
+               } @else {
+                 <p class="text-xs text-brand-muted italic">Đang chuẩn bị thông tin vận chuyển...</p>
+               }
+             </div>
+           }
 
           <!-- Receiver + Address -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -222,9 +269,11 @@ interface TimelineStep {
 export class OrderDetailComponent implements OnInit {
   private readonly orderService = inject(OrderService);
   private readonly paymentService = inject(PaymentService);
+  private readonly shipmentService = inject(ShipmentService);
   private readonly route = inject(ActivatedRoute);
 
   readonly order = signal<OrderDTO | null>(null);
+  readonly shipment = signal<ShipmentDTO | null>(null);
   readonly isLoading = signal(false);
   readonly isProcessing = signal(false);
   readonly errorMessage = signal('');
@@ -267,6 +316,12 @@ export class OrderDetailComponent implements OnInit {
         this.isLoading.set(false);
         if (res.success && res.data) {
           this.order.set(res.data);
+          const status = res.data.status;
+          if (status !== 'PENDING' && status !== 'CANCELLED') {
+            this.loadShipmentDetail(orderNumber);
+          } else {
+            this.shipment.set(null);
+          }
         } else {
           this.order.set(null);
           this.errorMessage.set(res.message || '');
@@ -277,6 +332,24 @@ export class OrderDetailComponent implements OnInit {
         this.order.set(null);
         this.errorMessage.set(err.message || '');
       },
+    });
+  }
+
+  loadShipmentDetail(orderNumber: string): void {
+    this.shipmentService.getShipmentByOrder(orderNumber).subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          if (res.data.trackingEvents) {
+            res.data.trackingEvents.sort(
+              (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+            );
+          }
+          this.shipment.set(res.data);
+        } else {
+          this.shipment.set(null);
+        }
+      },
+      error: () => this.shipment.set(null),
     });
   }
 
@@ -319,6 +392,21 @@ export class OrderDetailComponent implements OnInit {
       FAILED: 'Thất bại',
       REFUNDED: 'Đã hoàn tiền',
       PARTIALLY_REFUNDED: 'Hoàn tiền một phần',
+    };
+    return map[status] || status;
+  }
+
+  getShipmentStatusText(status: string): string {
+    const map: Record<string, string> = {
+      PENDING: 'Chờ xử lý',
+      PICKING: 'Đang chuẩn bị hàng',
+      PICKED_UP: 'Đã lấy hàng',
+      IN_TRANSIT: 'Đang vận chuyển',
+      OUT_FOR_DELIVERY: 'Đang giao hàng',
+      DELIVERED: 'Đã giao thành công',
+      FAILED: 'Giao hàng thất bại',
+      CANCELLED: 'Đã hủy',
+      RETURNED: 'Đã trả hàng',
     };
     return map[status] || status;
   }
