@@ -107,6 +107,11 @@ export const routes: Routes = [
         loadComponent: () => import('./views/routine/routine.component').then(m => m.RoutineComponent)
       },
       {
+        path: 'skin-analysis',
+        loadComponent: () => import('./views/skin-analysis/skin-analysis.component').then(m => m.SkinAnalysisComponent),
+        canActivate: [authGuard]
+      },
+      {
         path: 'products/compare',
         loadComponent: () => import('./views/product/compare/compare.component').then(m => m.CompareComponent)
       },

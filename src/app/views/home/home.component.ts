@@ -5,14 +5,18 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ProductService } from '../../core/services/product.service';
 import { CartService } from '../../core/services/cart.service';
 import { LanguageService } from '../../core/services/language.service';
+import { AuthService } from '../../core/services/auth.service';
+import { RecommendationService } from '../../core/services/recommendation.service';
+import { UserService } from '../../core/services/user.service';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { ProductSummaryDTO } from '../../core/models/product.model';
+import { ProductRowComponent } from '../../shared/components/product-row.component';
 
 @Component({
   selector: 'app-home',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, RouterLink, TranslatePipe],
+  imports: [CommonModule, RouterLink, TranslatePipe, ProductRowComponent],
   template: `
     <div class="space-y-16 md:space-y-24 pb-20">
       
@@ -266,16 +270,49 @@ import { ProductSummaryDTO } from '../../core/models/product.model';
         </div>
       </section>
 
+      <!-- Personalization rows -->
+      <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
+        @if (isAuthenticated() && recommended().length > 0) {
+          <app-product-row
+            title="Dành cho bạn"
+            subtitle="Gợi ý theo hồ sơ da"
+            icon="✨"
+            [products]="recommended()"
+          />
+        }
+        @if (recentlyViewed().length > 0) {
+          <app-product-row
+            title="Bạn đã xem gần đây"
+            icon="🕒"
+            [products]="recentlyViewed()"
+          />
+        }
+        @if (trending().length > 0) {
+          <app-product-row
+            title="Đang xu hướng"
+            subtitle="Bán chạy nhất tuần này"
+            icon="🔥"
+            [products]="trending()"
+          />
+        }
+      </section>
     </div>
   `
 })
 export class HomeComponent implements OnInit {
   private readonly productService = inject(ProductService);
   private readonly cartService = inject(CartService);
+  private readonly recommendationService = inject(RecommendationService);
+  private readonly userService = inject(UserService);
+  private readonly authService = inject(AuthService);
   readonly lang = inject(LanguageService);
+  readonly isAuthenticated = this.authService.isAuthenticated;
 
   readonly bestSellers = signal<ProductSummaryDTO[]>([]);
   readonly newArrivals = signal<ProductSummaryDTO[]>([]);
+  readonly recommended = signal<ProductSummaryDTO[]>([]);
+  readonly trending = signal<ProductSummaryDTO[]>([]);
+  readonly recentlyViewed = signal<ProductSummaryDTO[]>([]);
 
   readonly concernsList = [
     { 
@@ -493,6 +530,31 @@ export class HomeComponent implements OnInit {
         },
         error: () => this.newArrivals.set(this.mockNewArrivals),
       });
+
+    // Trending (anonymous-OK)
+    this.recommendationService.trending(8)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res) => this.trending.set(res.data?.products ?? []),
+        error: () => this.trending.set([]),
+      });
+
+    // Personalized + recently-viewed only when authenticated
+    if (this.isAuthenticated()) {
+      this.recommendationService.forMe()
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (res) => this.recommended.set(res.data?.products ?? []),
+          error: () => this.recommended.set([]),
+        });
+
+      this.userService.getRecentlyViewed(8)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (res) => this.recentlyViewed.set(res.data ?? []),
+          error: () => this.recentlyViewed.set([]),
+        });
+    }
   }
 
   addToCart(product: ProductSummaryDTO) {

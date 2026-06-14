@@ -6,14 +6,17 @@ import { ProductService } from '../../../core/services/product.service';
 import { CartService } from '../../../core/services/cart.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { SubscriptionService } from '../../../core/services/subscription.service';
+import { UserService } from '../../../core/services/user.service';
+import { RecommendationService } from '../../../core/services/recommendation.service';
 import { ProductDTO, ProductSummaryDTO, ProductVariantDTO } from '../../../core/models/product.model';
 import { AddressDTO } from '../../../core/models/auth.model';
 import { ProductReviewsComponent } from '../../../features/reviews/component/product-reviews.component';
+import { ProductRowComponent } from '../../../shared/components/product-row.component';
 
 @Component({
   selector: 'app-product-detail',
   standalone: true,
-  imports: [CommonModule, RouterLink, FormsModule, ProductReviewsComponent],
+  imports: [CommonModule, RouterLink, FormsModule, ProductReviewsComponent, ProductRowComponent],
   template: `
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
       
@@ -250,34 +253,26 @@ import { ProductReviewsComponent } from '../../../features/reviews/component/pro
           />
         </div>
 
-        <!-- Similar Products Section -->
+        <!-- Frequently bought together -->
+        @if (fbwProducts().length > 0) {
+          <div class="mb-10">
+            <app-product-row
+              title="Khách hàng thường mua kèm"
+              icon="🛒"
+              [products]="fbwProducts()"
+            />
+          </div>
+        }
+
+        <!-- Similar products -->
         @if (similarProducts().length > 0) {
-          <section class="space-y-6">
-            <h2 class="text-xl sm:text-2xl font-serif text-brand-charcoal border-b pb-3 mb-6">Sản Phẩm Tương Tự</h2>
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-              @for (similar of similarProducts(); track similar.id) {
-                <div class="bg-white rounded-skincare border border-brand-fuchsia-light/10 shadow-sm p-3 sm:p-4 hover:shadow-md hover:border-brand-fuchsia/40 transition-all duration-300 flex flex-col justify-between group">
-                  <a [routerLink]="['/products', similar.slug]" class="block overflow-hidden rounded-xl mb-3 aspect-square bg-brand-champagne">
-                    <img 
-                      [src]="similar.primaryImageUrl || 'assets/placeholder.jpg'" 
-                      [alt]="similar.name" 
-                      class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                  </a>
-                  <div class="space-y-1.5">
-                    <p class="text-[9px] text-brand-muted uppercase font-semibold tracking-wider">{{ similar.brandName }}</p>
-                    <a [routerLink]="['/products', similar.slug]">
-                      <h3 class="font-semibold text-brand-charcoal text-xs line-clamp-2 hover:text-brand-fuchsia transition-colors">{{ similar.name }}</h3>
-                    </a>
-                    <div class="flex items-center justify-between pt-2 border-t mt-2">
-                      <span class="text-xs sm:text-sm font-bold text-brand-fuchsia-dark">{{ similar.price | currency:'VND':'symbol':'1.0-0' }}</span>
-                      <a [routerLink]="['/products', similar.slug]" class="text-[10px] text-brand-fuchsia font-bold hover:underline">Chi tiết</a>
-                    </div>
-                  </div>
-                </div>
-              }
-            </div>
-          </section>
+          <div class="mb-10">
+            <app-product-row
+              title="Sản phẩm tương tự"
+              icon="✨"
+              [products]="similarProducts()"
+            />
+          </div>
         }
 
       }
@@ -351,6 +346,8 @@ export class DetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly authService = inject(AuthService);
   private readonly subService = inject(SubscriptionService);
+  private readonly userService = inject(UserService);
+  private readonly recommendationService = inject(RecommendationService);
 
   readonly isAuthenticated = computed(() => this.authService.isAuthenticated());
   readonly showSubModal = signal(false);
@@ -362,6 +359,7 @@ export class DetailComponent implements OnInit {
 
   readonly product = signal<ProductDTO | null>(null);
   readonly similarProducts = signal<ProductSummaryDTO[]>([]);
+  readonly fbwProducts = signal<ProductSummaryDTO[]>([]);
   readonly isLoading = signal(false);
 
   readonly activeImage = signal('');
@@ -417,10 +415,31 @@ export class DetailComponent implements OnInit {
       this.activePrice.set(data.salePrice || data.basePrice);
     }
 
-    this.productService.getSimilarProducts(data.slug).subscribe({
-      next: (res) => this.similarProducts.set(res.data ?? []),
-      error: () => this.similarProducts.set([]),
+    // Recommendation-service rows. Use product id (not slug) — both endpoints
+    // are public, no auth required.
+    this.recommendationService.similar(data.id).subscribe({
+      next: (res) => this.similarProducts.set(res.data?.products ?? []),
+      error: () => {
+        // Fallback to legacy similar endpoint if recommendation-service is down.
+        this.productService.getSimilarProducts(data.slug).subscribe({
+          next: (res) => this.similarProducts.set(res.data ?? []),
+          error: () => this.similarProducts.set([]),
+        });
+      },
     });
+
+    this.recommendationService.frequentlyBoughtWith(data.id).subscribe({
+      next: (res) => this.fbwProducts.set(res.data?.products ?? []),
+      error: () => this.fbwProducts.set([]),
+    });
+
+    // Track recently-viewed (logged-in users only — anonymous returns 401 silently).
+    if (this.authService.isAuthenticated()) {
+      this.userService.trackRecentlyViewed(data.id).subscribe({
+        next: () => {},
+        error: () => {},
+      });
+    }
   }
 
   selectVariant(variant: ProductVariantDTO) {

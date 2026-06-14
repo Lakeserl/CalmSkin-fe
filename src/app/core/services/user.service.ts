@@ -10,6 +10,7 @@ import {
   SkinProfileDTO,
   SkinProfileRequest,
 } from '../models/user.model';
+import { ProductSummaryDTO } from '../models/product.model';
 
 /**
  * Client for user-service endpoints under `/api/v1/users/me/*` that are
@@ -68,5 +69,30 @@ export class UserService {
 
   updateSkinProfile(data: SkinProfileRequest): Observable<ApiResponse<SkinProfileDTO>> {
     return this.api.put<SkinProfileDTO>('/api/v1/users/me/skin-profile', data);
+  }
+
+  // ─── Recently viewed ────────────────────────────────────────────────────
+
+  /** POST /api/v1/users/me/recently-viewed — track a product view. */
+  trackRecentlyViewed(productId: number): Observable<ApiResponse<void>> {
+    return this.api.post<void>('/api/v1/users/me/recently-viewed', { productId });
+  }
+
+  /** GET /api/v1/users/me/recently-viewed?limit= */
+  getRecentlyViewed(limit = 10): Observable<ApiResponse<ProductSummaryDTO[]>> {
+    return this.api.get<ProductSummaryDTO[]>('/api/v1/users/me/recently-viewed', { limit });
+  }
+
+  // ─── Avatar upload ──────────────────────────────────────────────────────
+
+  /**
+   * POST /api/v1/users/me/avatar/presign — get S3 PUT URL for new avatar.
+   * Flow: presign → PUT bytes to S3 → AuthService.updateProfile({avatarUrl}).
+   */
+  presignAvatar(filename: string, contentType: string, sizeBytes: number): Observable<ApiResponse<{ uploadUrl: string; mediaUrl: string }>> {
+    return this.api.post<{ uploadUrl: string; mediaUrl: string }>(
+      '/api/v1/users/me/avatar/presign',
+      { filename, contentType, sizeBytes },
+    );
   }
 }

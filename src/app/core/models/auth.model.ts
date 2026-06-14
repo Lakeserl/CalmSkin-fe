@@ -28,6 +28,8 @@ export interface UpdateProfileRequest {
   phoneNumber?: string;
   gender?: string;
   dateOfBirth?: string;
+  /** Set after presign-based avatar upload — the public S3 mediaUrl. */
+  avatarUrl?: string;
 }
 
 export interface ChangePasswordRequest {

@@ -1,10 +1,14 @@
-import { Component, inject, signal, computed } from '@angular/core';
+import { Component, DestroyRef, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { Subject } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../core/services/auth.service';
 import { CartService } from '../../core/services/cart.service';
 import { LanguageService } from '../../core/services/language.service';
+import { SearchService } from '../../core/services/search.service';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { NotificationBellComponent } from '../../features/notifications/component/notification-bell.component';
 
@@ -48,6 +52,10 @@ import { NotificationBellComponent } from '../../features/notifications/componen
               <span>✨</span>
               <span>Liệu trình</span>
             </a>
+            <a routerLink="/skin-analysis" class="text-indigo-600 font-bold hover:text-brand-fuchsia transition-colors duration-200 py-2 flex items-center space-x-1">
+              <span>🔍</span>
+              <span>AI phân tích da</span>
+            </a>
           </nav>
 
           <!-- Search Bar & Icons -->
@@ -62,16 +70,51 @@ import { NotificationBellComponent } from '../../features/notifications/componen
 
             <!-- Search Input -->
             <form (ngSubmit)="onSearch()" class="hidden lg:block relative max-w-xs">
-              <input 
-                type="text" 
-                [(ngModel)]="searchQuery" 
+              <input
+                type="text"
+                [(ngModel)]="searchQuery"
                 name="query"
-                [placeholder]="'nav.searchPlaceholder' | translate" 
+                (input)="onSearchInput()"
+                (focus)="onSearchFocus()"
+                (blur)="onSearchBlur()"
+                [placeholder]="'nav.searchPlaceholder' | translate"
+                autocomplete="off"
                 class="w-40 xl:w-52 px-4 py-2 text-xs rounded-full border border-brand-fuchsia-light/40 bg-white/70 focus:outline-none focus:ring-2 focus:ring-brand-fuchsia focus:border-transparent transition-all duration-300"
               />
               <button type="submit" class="absolute right-3 top-2.5 text-brand-muted hover:text-brand-fuchsia">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
               </button>
+
+              <!-- Autocomplete dropdown -->
+              @if (showSuggest() && (suggestions().length > 0 || trending().length > 0)) {
+                <div class="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-brand-fuchsia-light/20 py-2 z-50 max-h-80 overflow-y-auto">
+                  @if (suggestions().length > 0) {
+                    <p class="px-3 pt-1 pb-1 text-[10px] text-brand-muted uppercase tracking-wider font-semibold">Gợi ý</p>
+                    @for (s of suggestions(); track s) {
+                      <button
+                        type="button"
+                        class="w-full text-left px-3 py-1.5 text-xs hover:bg-brand-rosewater/30 transition-colors flex items-center space-x-2"
+                        (mousedown)="pickSuggestion(s)"
+                      >
+                        <svg class="w-3 h-3 text-brand-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        <span>{{ s }}</span>
+                      </button>
+                    }
+                  } @else if (trending().length > 0) {
+                    <p class="px-3 pt-1 pb-1 text-[10px] text-brand-muted uppercase tracking-wider font-semibold">Tìm kiếm phổ biến</p>
+                    @for (t of trending(); track t) {
+                      <button
+                        type="button"
+                        class="w-full text-left px-3 py-1.5 text-xs hover:bg-brand-rosewater/30 transition-colors flex items-center space-x-2"
+                        (mousedown)="pickSuggestion(t)"
+                      >
+                        <span class="text-[10px]">🔥</span>
+                        <span>{{ t }}</span>
+                      </button>
+                    }
+                  }
+                </div>
+              }
             </form>
 
             <!-- Cart Icon with Flyout trigger -->
@@ -222,6 +265,8 @@ export class HeaderComponent {
   private readonly authService = inject(AuthService);
   private readonly cartService = inject(CartService);
   private readonly router = inject(Router);
+  private readonly searchService = inject(SearchService);
+  private readonly destroyRef = inject(DestroyRef);
   readonly lang = inject(LanguageService);
 
   readonly currentUser = this.authService.currentUser;
@@ -233,7 +278,26 @@ export class HeaderComponent {
 
   readonly isCartOpen = signal(false);
   readonly isProfileOpen = signal(false);
+  readonly suggestions = signal<string[]>([]);
+  readonly trending = signal<string[]>([]);
+  readonly showSuggest = signal(false);
   searchQuery = '';
+
+  private readonly searchTerm$ = new Subject<string>();
+
+  constructor() {
+    this.searchTerm$
+      .pipe(
+        debounceTime(200),
+        distinctUntilChanged(),
+        switchMap((q) => this.searchService.suggest(q, 8)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (res) => this.suggestions.set(res.data ?? []),
+        error: () => this.suggestions.set([]),
+      });
+  }
 
   toggleCartDropdown() {
     this.isCartOpen.set(!this.isCartOpen());
@@ -253,9 +317,40 @@ export class HeaderComponent {
     if (this.searchQuery.trim()) {
       this.router.navigate(['/products'], { queryParams: { query: this.searchQuery.trim() } });
       this.searchQuery = '';
+      this.showSuggest.set(false);
       this.isCartOpen.set(false);
       this.isProfileOpen.set(false);
     }
+  }
+
+  onSearchInput(): void {
+    const q = this.searchQuery.trim();
+    if (q.length < 2) {
+      this.suggestions.set([]);
+    } else {
+      this.searchTerm$.next(q);
+    }
+    this.showSuggest.set(true);
+  }
+
+  onSearchFocus(): void {
+    this.showSuggest.set(true);
+    if (this.trending().length === 0) {
+      this.searchService.trending(6).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+        next: (res) => this.trending.set(res.data ?? []),
+        error: () => this.trending.set([]),
+      });
+    }
+  }
+
+  onSearchBlur(): void {
+    // Delay so (mousedown) on a suggestion fires before the dropdown collapses.
+    setTimeout(() => this.showSuggest.set(false), 150);
+  }
+
+  pickSuggestion(term: string): void {
+    this.searchQuery = term;
+    this.onSearch();
   }
 
   logout() {

@@ -1,10 +1,14 @@
-import { Component, inject, signal, OnInit, DestroyRef } from '@angular/core';
+import { Component, ElementRef, ViewChild, inject, signal, OnInit, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
+import { switchMap } from 'rxjs/operators';
+import { throwError } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../core/services/auth.service';
 import { OrderService, VietnamRegion } from '../../core/services/order.service';
+import { UserService } from '../../core/services/user.service';
 import { LanguageService } from '../../core/services/language.service';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { UserDTO, AddressDTO, LoyaltyTransactionDTO } from '../../core/models/auth.model';
@@ -25,13 +29,28 @@ import { UserDTO, AddressDTO, LoyaltyTransactionDTO } from '../../core/models/au
             
             <!-- Avatar Box -->
             <div class="relative w-24 h-24 mx-auto rounded-full overflow-hidden border-2 border-brand-fuchsia bg-brand-rosewater group shadow-md">
-              <img 
-                [src]="profile()?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'" 
-                class="w-full h-full object-cover" 
+              <img
+                [src]="profile()?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'"
+                class="w-full h-full object-cover"
               />
-              <button (click)="uploadAvatar()" class="absolute inset-0 bg-black/40 text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                {{ 'profile.changeAvatar' | translate }}
+              <button
+                (click)="uploadAvatar()"
+                [disabled]="isUploadingAvatar()"
+                class="absolute inset-0 bg-black/40 text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all disabled:opacity-100 disabled:bg-black/60"
+              >
+                @if (isUploadingAvatar()) {
+                  Đang tải...
+                } @else {
+                  {{ 'profile.changeAvatar' | translate }}
+                }
               </button>
+              <input
+                #avatarPicker
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                class="hidden"
+                (change)="onAvatarFile($event)"
+              />
             </div>
 
             <div>
@@ -363,8 +382,13 @@ import { UserDTO, AddressDTO, LoyaltyTransactionDTO } from '../../core/models/au
 export class ProfileComponent implements OnInit {
   private readonly authService = inject(AuthService);
   private readonly orderService = inject(OrderService);
+  private readonly userService = inject(UserService);
+  private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+
+  @ViewChild('avatarPicker') avatarPicker?: ElementRef<HTMLInputElement>;
+  readonly isUploadingAvatar = signal(false);
   readonly lang = inject(LanguageService);
 
   readonly profile = signal<UserDTO | null>(null);
@@ -541,21 +565,65 @@ export class ProfileComponent implements OnInit {
       });
   }
 
-  uploadAvatar() {
-    const url = prompt(this.lang.currentLang() === 'vi'
-      ? 'Nhập đường dẫn URL ảnh đại diện mới của bạn:'
-      : 'Enter your new avatar image URL:'
-    );
-    if (!url) return;
+  uploadAvatar(): void {
+    this.avatarPicker?.nativeElement.click();
+  }
 
-    this.authService.updateAvatar(url)
-      .pipe(takeUntilDestroyed(this.destroyRef))
+  /**
+   * File-picker change → presign → direct-to-S3 PUT → updateProfile({avatarUrl}).
+   * The jwt interceptor skips off-gateway URLs so the S3 PUT isn't tainted with
+   * Authorization.
+   */
+  onAvatarFile(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
+      alert(this.lang.currentLang() === 'vi' ? 'Chỉ chấp nhận JPEG, PNG, WEBP.' : 'Only JPEG, PNG, WEBP allowed.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert(this.lang.currentLang() === 'vi' ? 'Ảnh vượt quá 5MB.' : 'Image exceeds 5MB.');
+      return;
+    }
+
+    this.isUploadingAvatar.set(true);
+    const profile = this.profile();
+    const baseUpdate = {
+      fullName: profile?.fullName ?? '',
+      phoneNumber: profile?.phoneNumber,
+      gender: profile?.gender,
+      dateOfBirth: profile?.dateOfBirth,
+    };
+
+    this.userService
+      .presignAvatar(file.name, file.type, file.size)
+      .pipe(
+        switchMap((res) => {
+          const presign = res.data;
+          if (!presign) return throwError(() => new Error('Máy chủ không trả về URL upload.'));
+          return this.http
+            .put(presign.uploadUrl, file, {
+              headers: { 'Content-Type': file.type },
+              responseType: 'text',
+            })
+            .pipe(
+              switchMap(() =>
+                this.authService.updateProfile({ ...baseUpdate, avatarUrl: presign.mediaUrl }),
+              ),
+            );
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe({
         next: () => {
-          alert(this.lang.currentLang() === 'vi' ? 'Thay đổi ảnh đại diện thành công!' : 'Avatar changed successfully!');
+          this.isUploadingAvatar.set(false);
           this.loadUserData();
         },
         error: (err) => {
+          this.isUploadingAvatar.set(false);
           alert(err?.message || (this.lang.currentLang() === 'vi' ? 'Đổi ảnh đại diện thất bại.' : 'Failed to update avatar.'));
         },
       });
